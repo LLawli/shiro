@@ -288,6 +288,24 @@ version-and-digest pinning that makes the sora installation auditable. Opening
 the repository at first release is the path that removes the token entirely,
 and remains available.
 
+## The release artifact is one static musl binary per architecture
+
+A tag builds `x86_64-unknown-linux-musl` and publishes
+`shiro-<version>-<target>.tar.gz` containing the binary alone, plus a `.sha256`
+next to it. The installer verifies the checksum before it installs anything.
+
+musl because the artifact's job is to drop into an image and work, and a glibc
+build ties the binary to the libc of whatever built it, which is the one thing
+an image-based host has no way to fix afterwards. The tarball holds only the
+binary because the base curation is embedded at build time: there is nothing
+else to ship yet, and inventing a layout now would have to be undone when
+generated completions arrive.
+
+Only x86_64 is built, because that is what kuuhaku-os targets. Another
+architecture is a target in the release workflow and a case in the installer,
+and the installer already fails on an unrecognised one with a message that says
+to build from source rather than a confusing 404.
+
 ## English code and messages, bilingual README
 
 Same as sora: the project was born in Portuguese, the audience is not. Code,
