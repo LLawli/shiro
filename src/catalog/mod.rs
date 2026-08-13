@@ -16,29 +16,7 @@ use std::path::PathBuf;
 use sha2::{Digest, Sha256};
 
 use crate::catalog::model::ItemDecl;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Layer {
-    BuiltIn,
-    Image,
-    Machine,
-    User,
-}
-
-impl Layer {
-    /// Lowest precedence first, which is also load order: a later layer
-    /// replaces what an earlier one declared.
-    pub const ALL: [Layer; 4] = [Layer::BuiltIn, Layer::Image, Layer::Machine, Layer::User];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Layer::BuiltIn => "built-in",
-            Layer::Image => "image",
-            Layer::Machine => "machine",
-            Layer::User => "user",
-        }
-    }
-}
+pub use crate::layers::Layer;
 
 /// Where a declaration came from.
 #[derive(Debug, Clone)]

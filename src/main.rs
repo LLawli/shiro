@@ -6,6 +6,7 @@ mod cli;
 mod dispatch;
 mod error;
 mod exec;
+mod layers;
 mod native;
 mod perms;
 mod render;

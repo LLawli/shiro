@@ -5,19 +5,15 @@
 //! `hidden = true` suppresses an inherited node without replacing it.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::{env, fs};
+use std::fs;
+use std::path::Path;
 
 use crate::catalog::model::{CatalogFile, ItemDecl, MenuDecl};
 use crate::catalog::{Catalog, Kind, Layer, LayerReport, Node, Source};
 use crate::error::Error;
+use crate::layers;
 
 include!(concat!(env!("OUT_DIR"), "/builtin_catalog.rs"));
-
-/// Where each layer lives, relative to `SHIRO_ROOT` for the two system ones.
-const IMAGE_DIR: &str = "usr/share/shiro/catalog";
-const MACHINE_DIR: &str = "etc/shiro/catalog";
-const USER_DIR: &str = "shiro/catalog";
 
 pub fn load() -> Result<Catalog, Error> {
     let mut nodes = BTreeMap::new();
@@ -53,7 +49,7 @@ fn load_layer(layer: Layer, nodes: &mut BTreeMap<String, Node>) -> Result<LayerR
             ("<built-in>".to_owned(), true, BUILTIN_CATALOG.len())
         }
         _ => {
-            let dir = layer_dir(layer);
+            let dir = layers::dir(layer, "catalog");
             let location = dir
                 .as_ref()
                 .map(|dir| dir.display().to_string())
@@ -69,9 +65,8 @@ fn load_layer(layer: Layer, nodes: &mut BTreeMap<String, Node>) -> Result<LayerR
                 });
             };
 
-            let mut found = Vec::new();
-            collect(&dir, &mut found)?;
-            found.sort();
+            let found = layers::toml_files(&dir)
+                .map_err(|err| Error::Catalog(format!("cannot read {}: {err}", dir.display())))?;
 
             for file in &found {
                 let contents = fs::read_to_string(file).map_err(|err| {
@@ -96,48 +91,6 @@ fn load_layer(layer: Layer, nodes: &mut BTreeMap<String, Node>) -> Result<LayerR
         files,
         nodes: 0,
     })
-}
-
-fn layer_dir(layer: Layer) -> Option<PathBuf> {
-    match layer {
-        Layer::BuiltIn => None,
-        // SHIRO_ROOT reroots the two system layers. It exists so that the
-        // loader can be exercised, and a machine's catalog inspected, without
-        // writing to /usr or /etc.
-        Layer::Image => Some(root().join(IMAGE_DIR)),
-        Layer::Machine => Some(root().join(MACHINE_DIR)),
-        Layer::User => Some(user_data_dir()?.join(USER_DIR)),
-    }
-}
-
-fn root() -> PathBuf {
-    env::var_os("SHIRO_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/"))
-}
-
-fn user_data_dir() -> Option<PathBuf> {
-    if let Some(xdg) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(xdg));
-    }
-    env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(|home| PathBuf::from(home).join(".local/share"))
-}
-
-fn collect(dir: &Path, found: &mut Vec<PathBuf>) -> Result<(), Error> {
-    let entries = fs::read_dir(dir)
-        .map_err(|err| Error::Catalog(format!("cannot read {}: {err}", dir.display())))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect(&path, found)?;
-        } else if path.extension().is_some_and(|ext| ext == "toml") {
-            found.push(path);
-        }
-    }
-    Ok(())
 }
 
 fn merge_file(
