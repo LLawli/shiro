@@ -4,15 +4,15 @@ Read [docs/architecture.md](docs/architecture.md) for the contract and
 [docs/decisions.md](docs/decisions.md) for why it is shaped that way. The rules
 below are the ones that are easy to miss and expensive to miss.
 
-## The engine must never learn a mechanism
+## The recipe executor must never learn a mechanism
 
-**No Flatpak, podman, distrobox, rpm-ostree or Quadlet knowledge goes into
-`src/`.** The `mechanism` field of a recipe is a label for grouping and
-display; the engine does not branch on it, ever.
+**No Flatpak, podman, distrobox, rpm-ostree or Quadlet knowledge goes into the
+engine.** The `mechanism` field of a recipe is a label for grouping and
+display; the executor does not branch on it, ever.
 
 Concretely, any of these is a violation:
 
-- a `match` or `if` on `mechanism` anywhere in the engine;
+- a `match` or `if` on `mechanism` anywhere in the executor;
 - a hook the engine synthesizes because it "knows" what Flatpak needs;
 - a validation rule that only makes sense for one mechanism;
 - special-casing an error message by mechanism.
@@ -27,6 +27,44 @@ time.
 If a mechanism genuinely cannot be expressed as hooks, that is a finding about
 the hook model. Fix the hook model, in `docs/architecture.md`, in the same
 commit.
+
+## The permissions module is the one exception, and it stays sealed
+
+`src/perms/` knows about Flatpak overrides and bwrap because that is its
+purpose. The exception survives only while it is sealed, which means all three
+of these hold:
+
+1. **The module is reachable from exactly two places:** its own native commands
+   (`shiro perms`, `shiro run`), and the engine recording an
+   `[item.permissions]` declaration into the profile registry.
+2. **The recipe executor never calls into it.** Not to apply a profile, not to
+   check one, not to warn about one. Installing and confining are separate
+   operations that happen to ship together.
+3. **Recording a declaration is a data write and nothing more.** No bwrap, no
+   flatpak, no wrapper script, no `.desktop` file. Generating the executable
+   that calls `shiro run` is the recipe's `post`.
+
+Rule 3 is the one that will be tempting to break, because "the engine could
+just write the `.desktop` too" removes boilerplate from every recipe. It also
+puts desktop-entry conventions inside the engine forever.
+
+## `shiro run` fails closed, loudly
+
+An application with no profile runs under the minimal fallback: no network, no
+home, no devices, no session bus. It may never run unconfined because a profile
+was missing.
+
+A missing profile is not an error, it is a fallback, so the warning is the only
+thing standing between the user and an application that mysteriously cannot
+open its own files. It goes to stderr, names the profile that was looked for,
+and says where one can be placed.
+
+## `shiro perms` never infers its backend
+
+The backend is always in the command: `shiro perms flatpak <app>`,
+`shiro perms run <app>`. The user has to be able to audit what mechanism is
+being talked to, and a command that means different things for different
+applications cannot be audited.
 
 ## Changing the command surface or the schema means changing three things
 

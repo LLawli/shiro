@@ -64,6 +64,12 @@ This is the boundary that the design most depends on and is the easiest to
 erode. A pull request that adds `if mechanism == "flatpak"` to the engine is
 rejected on principle even when it is locally the smaller change.
 
+**The one exception is the permissions module**, whose entire purpose is to
+know about Flatpak overrides and bwrap. It is delimited by being reachable only
+through its own native commands and one declarative field, and by the recipe
+executor never calling into it. The rule above is therefore about the executor,
+precisely: no branch on `mechanism`, anywhere, for any reason.
+
 ## No state database
 
 The engine records nothing about what it installed. `check` asks the system.
@@ -169,6 +175,65 @@ not by structure. If it erodes, this decision was the wrong one.
 included them, and the module ships without them because there is no bounded,
 obvious mechanism there the way `flatpak override` and `bwrap` are bounded and
 obvious. Revisit if a real need shows up.
+
+## The engine records `[item.permissions]` and does nothing else with it
+
+It writes the declaration into the profile registry. It does not invoke bwrap
+or flatpak, does not generate a wrapper, does not touch a `.desktop` file. The
+recipe's `post` generates whatever executable or desktop entry calls
+`shiro run`.
+
+Rejected "the engine does everything", which would have removed boilerplate
+from every recipe: it puts wrapper generation and desktop-entry editing inside
+the engine, where they become a mechanism the engine has to keep up with, and
+`.desktop` conventions are exactly the kind of thing that drifts.
+
+Rejected "the engine ignores the field, recipes call `shiro perms set` in
+`post`", which is the purest version of the boundary: it makes the declaration
+inert documentation that can silently disagree with what the recipe actually
+does, and it puts a mutation outside the transaction, where the engine cannot
+roll it back.
+
+What is left is the smallest useful thing the engine can do with the field:
+turn data into data. Because that write is the engine's own mutation rather
+than a recipe's, the engine owns reverting it, and it participates in the
+item's rollback policy with nothing declared.
+
+## `shiro perms` always names its backend
+
+`shiro perms flatpak <app>` and `shiro perms run <app>`, never
+`shiro perms <app>` with the backend inferred.
+
+Inferring would be friendlier and was rejected. This is a tool whose output the
+user has to trust when reasoning about what an application can reach, and a
+tool that silently picks a mechanism cannot be audited: the same command would
+mean different things for two applications, with nothing on screen to say
+which. The verbosity is the feature.
+
+## Profiles layer like the catalog, and the user layer may loosen
+
+Same four layers, same precedence, same wholesale replacement rather than
+field-level merge, for the same reason: a half-overridden sandbox cannot be
+reasoned about.
+
+The user may loosen a profile, not only tighten it. A stricter design was
+considered (system defines the ceiling, user may only restrict further) and
+rejected as security theatre in this context: this is a single-user
+workstation, the user is root, and a user who cannot grant their own browser
+one directory will edit the `.desktop` file to bypass `shiro run` entirely.
+That outcome is strictly worse, because it removes the sandbox rather than
+adjusting it.
+
+## The bwrap fallback grants almost nothing, and says so
+
+An application with no profile runs under a sandbox with no network, no home,
+no devices and no session bus. It will fail to do most of what it wants.
+
+Failing open was never on the table: a sandbox that silently disappears when a
+profile is missing is worse than no sandbox at all, because the user believes
+it is there. The cost of failing closed is a confusing breakage, and that is
+paid down by making the fallback loud: it warns on stderr, names the profile it
+looked for, and says where one can be placed.
 
 ## Portable engine, opinionated curation
 
