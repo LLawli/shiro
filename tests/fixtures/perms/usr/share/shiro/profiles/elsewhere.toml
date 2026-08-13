@@ -1,0 +1,8 @@
+# A program installed outside /usr, which the sandbox does not contain unless
+# the profile says to bind its directory.
+
+backend = "run"
+app     = "elsewhere"
+
+[run]
+command = "/opt/elsewhere/bin/elsewhere"

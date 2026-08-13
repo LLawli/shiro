@@ -15,6 +15,12 @@ fn shiro(args: &[&str]) -> Output {
     let root = root();
     Command::new(env!("CARGO_BIN_EXE_shiro"))
         .args(args)
+        // A fixed PATH, so that resolving an application by name finds the same
+        // program on every machine. A developer with Homebrew ahead of /usr on
+        // PATH would otherwise get a `true` the sandbox does not contain, and
+        // that is a real behavior worth its own test rather than an accident in
+        // all of them.
+        .env("PATH", "/usr/bin:/bin")
         .env("SHIRO_ROOT", &root)
         .env("XDG_DATA_HOME", root.join("xdg"))
         .output()
@@ -101,6 +107,27 @@ fn the_base_is_read_only_and_has_no_real_home() {
 }
 
 #[test]
+fn a_program_outside_the_sandbox_is_called_out() {
+    // Homebrew, /opt, anything under home: the program is simply not there once
+    // the sandbox is built, and bwrap's own error names the program rather than
+    // the reason.
+    let root = root();
+    let out = Command::new(env!("CARGO_BIN_EXE_shiro"))
+        .args(["perms", "run", "elsewhere"])
+        .env("PATH", "/opt/somewhere/bin:/usr/bin")
+        .env("SHIRO_ROOT", &root)
+        .env("XDG_DATA_HOME", root.join("xdg"))
+        .output()
+        .expect("the binary runs");
+
+    // The fixture profile puts the command outside /usr on purpose.
+    assert!(out.status.success(), "{}", stderr(&out));
+    let message = stderr(&out);
+    assert!(message.contains("is outside /usr"), "{message}");
+    assert!(message.contains("`read-only`"), "{message}");
+}
+
+#[test]
 fn a_profile_that_names_another_application_is_refused() {
     let out = shiro(&["perms", "run", "mismatch"]);
     assert_eq!(out.status.code(), Some(1));
@@ -152,11 +179,10 @@ fn a_permission_word_shiro_does_not_know_is_refused_with_the_list() {
 #[test]
 fn run_warns_before_falling_back_and_never_runs_unconfined() {
     if !bwrap_works() {
-        eprintln!("skipped: bwrap cannot create a sandbox here");
         return;
     }
 
-    // /usr/bin/true exists inside the sandbox, because /usr is bound read only.
+    // /usr/bin/true is in the sandbox, because /usr is bound read only.
     let out = shiro(&["run", "true"]);
     let message = stderr(&out);
 
@@ -167,9 +193,21 @@ fn run_warns_before_falling_back_and_never_runs_unconfined() {
 }
 
 #[test]
+fn a_profile_launches_the_command_it_declares() {
+    if !bwrap_works() {
+        return;
+    }
+
+    // The brave fixture declares /usr/bin/true as its command, so a run that
+    // exits 0 means the sandbox was built and the program inside it ran.
+    let out = shiro(&["run", "brave"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(!stderr(&out).contains("no profile"), "{}", stderr(&out));
+}
+
+#[test]
 fn a_sandboxed_process_cannot_see_the_home_directory() {
     if !bwrap_works() {
-        eprintln!("skipped: bwrap cannot create a sandbox here");
         return;
     }
 
@@ -179,7 +217,8 @@ fn a_sandboxed_process_cannot_see_the_home_directory() {
         return;
     }
 
-    // `test -e` on a real file in the real home, from inside the fallback.
+    // `test -e` on a real file in the real home, from inside the fallback. The
+    // home directory is a tmpfs in there, so the answer has to be no.
     let out = shiro(&["run", "test", "-e", &marker.display().to_string()]);
     assert_eq!(
         out.status.code(),
@@ -189,16 +228,63 @@ fn a_sandboxed_process_cannot_see_the_home_directory() {
     );
 }
 
+/// Whether bwrap can build a sandbox on this host at all.
+///
+/// The probe is the base `shiro run` builds, merged-usr symlinks included.
+/// Leaving them out makes bwrap fail with `execvp: No such file or directory`,
+/// because the dynamic loader is not in the sandbox, and that reads exactly like
+/// "no sandbox here" when the sandbox was fine.
+///
+/// So the only accepted reason to skip is an environment that cannot create
+/// namespaces. Any other failure is a broken probe, and it fails the test rather
+/// than quietly turning it off.
 fn bwrap_works() -> bool {
-    Command::new("bwrap")
+    let probe = Command::new("bwrap")
         .args([
             "--unshare-all",
             "--ro-bind",
             "/usr",
             "/usr",
+            "--symlink",
+            "usr/lib",
+            "/lib",
+            "--symlink",
+            "usr/lib64",
+            "/lib64",
+            "--symlink",
+            "usr/bin",
+            "/bin",
             "/usr/bin/true",
         ])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .output();
+
+    let probe = match probe {
+        Ok(probe) => probe,
+        Err(err) => {
+            eprintln!("skipped: bwrap is not on this host ({err})");
+            return false;
+        }
+    };
+
+    if probe.status.success() {
+        return true;
+    }
+
+    let why = String::from_utf8_lossy(&probe.stderr).to_lowercase();
+    let cannot_namespace = ["permitted", "namespace", "uid map", "setgroups", "denied"]
+        .iter()
+        .any(|reason| why.contains(reason));
+
+    assert!(
+        cannot_namespace,
+        "the bwrap probe failed for a reason that is not a missing namespace, so these tests \
+         would be skipped for the wrong reason: {}",
+        why.trim()
+    );
+
+    eprintln!(
+        "skipped: bwrap cannot create a sandbox here ({})",
+        why.trim()
+    );
+    false
 }
