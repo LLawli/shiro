@@ -48,6 +48,22 @@ would have avoided the collision at the cost of the natural typing order.
 Native commands keep a reserved namespace regardless (see architecture.md
 section 1), but that set is small, fixed and validated loudly.
 
+## No argument-parsing crate
+
+Argument handling is hand-written: split argv into a native command or a path
+into the catalog, and hand the rest to whoever runs it.
+
+A declarative parser describes a fixed surface, and shiro's surface is not fixed
+and is not known until the catalog is loaded. What clap or a peer would actually
+describe is the five native commands, which is the part that needs the least
+help, while the part that needs real work (a good error for a path that stops
+matching halfway, help text and completions generated from data) it cannot do at
+all. Adding it would buy a dependency in the hot path and leave both jobs
+undone.
+
+Revisit if the flag surface grows past what is comfortable to read in one
+function. The catalog path itself never becomes a parser's problem.
+
 ## The engine never learns a mechanism
 
 There is no Flatpak code in the engine, no podman code, no distrobox code.
