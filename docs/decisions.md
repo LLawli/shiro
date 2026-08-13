@@ -412,17 +412,26 @@ explicitly. shiro exposes no command that decides between them from a status
 it just read, because that status can be stale by the time the user clicks, and
 the failure mode is removing something the user meant to add.
 
-## Distribution: private release tarball with a token
+## Distribution: a public release tarball, pinned by the consumer
 
-Same shape as sora (tarball, version and sha256 pinned in the consumer), but
-the repository is private for now, so the kuuhaku-os build needs a read token
-to fetch the release.
+Same shape as sora: a tarball, with the version and sha256 pinned where it is
+consumed. The repository is public, so the kuuhaku-os build fetches the release
+with no credential at all.
+
+This replaces the original plan, which kept the repository private and gave the
+image build a read token. The token was never the point, it was the cost of
+staying closed, and it bought nothing: a build secret to rotate, a failure mode
+that only appears in someone else's CI, and an installer whose main path could
+not be tested by anyone who did not already have access. Opening it was always
+listed as the path that removes the token, and taking it early costs less than
+taking it later.
+
+The installer still honours `SHIRO_TOKEN`, which now covers a private fork and
+the anonymous rate limit rather than the project itself.
 
 Rejected building from source inside the `Containerfile`: it would drag a Rust
 toolchain into the image build for every rebuild, and it would lose the
-version-and-digest pinning that makes the sora installation auditable. Opening
-the repository at first release is the path that removes the token entirely,
-and remains available.
+version-and-digest pinning that makes the sora installation auditable.
 
 ## The release artifact is one static musl binary per architecture
 

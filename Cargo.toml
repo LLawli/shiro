@@ -6,6 +6,7 @@ rust-version = "1.88"
 description = "Turns a curated TOML catalog into an executable, navigable command tree"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/LLawli/shiro"
 publish = false
 
 [dependencies]

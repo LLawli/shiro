@@ -8,8 +8,8 @@
 # OS image rebases on atomic distros). Override the destination with
 # PREFIX=/some/path.
 #
-# The repository is private for now, so a read token is required until the
-# first public release: pass it as SHIRO_TOKEN or GITHUB_TOKEN.
+# The repository is public and no token is needed. SHIRO_TOKEN (or GITHUB_TOKEN)
+# is still honoured, for a private fork or to lift the anonymous rate limit.
 #
 # Requires only curl + tar + sha256sum, deliberately not cargo or git, since
 # the whole point of shipping a binary is that the host needs neither.
@@ -28,8 +28,8 @@ case "$(uname -m)" in
     *) echo "error: no release is built for $(uname -m); build from source with 'cargo build --release'" >&2; exit 1 ;;
 esac
 
-# One place decides whether the token is sent, so a private repository and a
-# public one differ by an environment variable and nothing else.
+# One place decides whether the token is sent, so a public repository and a
+# private fork differ by an environment variable and nothing else.
 fetch() {
     if [ -n "$TOKEN" ]; then
         curl -fsSL -H "Authorization: Bearer $TOKEN" "$@"
@@ -47,8 +47,9 @@ TAG=$(printf '%s' "$release" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\
 
 if [ -z "$TAG" ]; then
     echo "error: no release found for $REPO." >&2
+    echo "       Build from source instead: cargo build --release" >&2
     if [ -z "$TOKEN" ]; then
-        echo "       The repository is private; set SHIRO_TOKEN to a read token." >&2
+        echo "       If $REPO is private, set SHIRO_TOKEN to a read token." >&2
     fi
     exit 1
 fi
