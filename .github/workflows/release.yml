@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The tag names the release and Cargo.toml names the binary. A release
+      # where they disagree ships an artifact whose file name lies about what is
+      # inside it, and the consumer pins the file name.
+      - name: Check the tag against the manifest
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          manifest=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$tagged" != "$manifest" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $manifest" >&2
+            exit 1
+          fi
+
       - name: Install the toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -31,6 +43,15 @@ jobs:
         run: |
           ver="${GITHUB_REF_NAME#v}"
           asset="shiro-$ver-$TARGET.tar.gz"
+          binary="target/$TARGET/release/shiro"
+
+          # A build that exits 0 and leaves nothing behind is worse than a build
+          # that fails, so the artifact is checked before it is wrapped: it
+          # exists, it is not a stub, and it runs.
+          test -x "$binary"
+          test "$(stat -c%s "$binary")" -gt 200000
+          "$binary" version
+
           tar -czf "$asset" -C "target/$TARGET/release" shiro
           sha256sum "$asset" > "$asset.sha256"
           echo "asset=$asset" >> "$GITHUB_ENV"
