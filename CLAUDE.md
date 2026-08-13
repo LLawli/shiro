@@ -70,7 +70,7 @@ resolved or spawned that the current invocation does not need. In particular:
 - keep the children's checks parallel and bounded.
 
 This is the entire reason the project is compiled rather than shell. A change
-that makes a cold `jibril install code --json` measurably slower needs to
+that makes a cold `shiro install code --json` measurably slower needs to
 justify itself against that.
 
 ## A recipe that mutates in `pre` must declare `roll-pre`

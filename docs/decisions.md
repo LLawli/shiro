@@ -15,7 +15,7 @@ cost, not a benchmark curiosity. An interpreted runtime pays it every time.
 
 This is the opposite conclusion from [sora](https://github.com/LLawli/sora),
 and deliberately so. sora's hot path is a shell hook that must not spawn an
-interpreter at all, which forces shell. jibril's hot path is a process that
+interpreter at all, which forces shell. shiro's hot path is a process that
 must start fast and then fan out, which forbids one.
 
 Rust over Go on a secondary point: no runtime, a fully static-ish binary that
@@ -29,7 +29,7 @@ Subcommands are not written in Rust. The TOML declares a tree of menus and
 items, and the argument path is a path into that tree.
 
 This is what makes the curation the product. Adding a whole command group is a
-TOML file; a distro can extend the surface without a jibril release; a user can
+TOML file; a distro can extend the surface without a shiro release; a user can
 add a private group in their home directory. The alternative, a fixed CLI that
 reads a list of installables, makes every structural idea wait on a release.
 
@@ -39,7 +39,7 @@ about a malformed catalog have to be as good as errors about a wrong command.
 
 ## Menus list themselves; there is no `list` verb
 
-`jibril install code` lists, because a menu has nothing to execute. A `list`
+`shiro install code` lists, because a menu has nothing to execute. A `list`
 suffix would have made `list` a reserved word that a catalog author could
 collide with, and the collision would surface as a curated item that is
 unreachable for reasons the author cannot see. A prefix verb or a `--list` flag
@@ -116,7 +116,7 @@ harmless: one is a hook key inside an item, the other is a path segment.
 
 ## Reinstalling refuses instead of re-running
 
-`jibril install <item>` on an item that `check` reports as installed exits with
+`shiro install <item>` on an item that `check` reports as installed exits with
 an error and suggests `--force`.
 
 Recipes are hand-written shell. Idempotence cannot be validated, only claimed,
@@ -139,16 +139,36 @@ behavior that survives a distracted user.
 `check` is the exception in the other direction: it may never elevate at all,
 because it runs unbidden while a menu draws.
 
-## Permissions are the recipe author's call, until shiro exists
+## Cancelled: shiro as a separate, ambitious permissions project
 
-A recipe may set a Flatpak override, create a box with restricted mounts, or do
-nothing at all. The engine imposes no policy and offers no permission model.
+The original plan had a fourth project named shiro: a general sandboxing layer
+covering distrobox boxes, Flatpaks and native applications under bwrap, aiming
+well past what firejail does. It was cancelled before a line was written, and
+this project took its name.
 
-[shiro](https://github.com/LLawli/shiro) is the project that will own this:
-permissions across distrobox boxes, Flatpaks and native applications run under
-bwrap. Building a permission model into jibril now would mean building the
-wrong one and then having to break it. When shiro lands it reads the system,
-not a jibril-specific declaration, so there is nothing here to migrate.
+**Why it was cancelled:** the scope was larger than the distro it was meant to
+serve, and it was the last of the four to start, which is a combination that
+predicts a project that never ships. Meanwhile the thing that actually needed
+solving was narrow and concrete: the browser should run sandboxed even though
+it is not a Flatpak, and Flatpak overrides should be manageable without
+memorising the CLI.
+
+**Why it landed here rather than staying separate and smaller:** installing a
+tool and deciding what it may touch happen at the same moment. The point where
+something new lands on the system is when its blast radius is decided, and the
+only time anyone thinks about it. Keeping the two in one binary means a recipe
+can declare a profile as part of describing the tool.
+
+The cost is a real one and it is the reason this entry exists: the engine now
+contains a subsystem that knows about specific mechanisms (Flatpak, bwrap),
+which the engine is otherwise forbidden from doing. The boundary that keeps
+that from spreading is documented in architecture.md and enforced by review,
+not by structure. If it erodes, this decision was the wrong one.
+
+**What was given up:** distrobox boxes are not covered. The original scope
+included them, and the module ships without them because there is no bounded,
+obvious mechanism there the way `flatpak override` and `bwrap` are bounded and
+obvious. Revisit if a real need shows up.
 
 ## Portable engine, opinionated curation
 
@@ -171,7 +191,7 @@ silently at the worst moment.
 ## No toggle command
 
 A front end that knows an item's status invokes `install` or `uninstall`
-explicitly. jibril exposes no command that decides between them from a status
+explicitly. shiro exposes no command that decides between them from a status
 it just read, because that status can be stale by the time the user clicks, and
 the failure mode is removing something the user meant to add.
 

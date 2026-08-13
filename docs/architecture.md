@@ -7,14 +7,14 @@ read. If behavior and this file disagree, one of them is a bug.
 
 ## 1. The catalog is the command surface
 
-There is no hardcoded list of subcommands for the curated part of jibril. The
+There is no hardcoded list of subcommands for the curated part of shiro. The
 catalog declares a tree; the arguments after the binary name are a path into
 that tree.
 
 ```sh
-jibril install                 # node "install": a menu, so it lists children
-jibril install code            # node "install/code": a menu, lists children
-jibril install code vs-code    # node "install/code/vs-code": an item, executes
+shiro install                 # node "install": a menu, so it lists children
+shiro install code            # node "install/code": a menu, lists children
+shiro install code vs-code    # node "install/code/vs-code": an item, executes
 ```
 
 Two node kinds, and the kind alone decides what an invocation means:
@@ -27,17 +27,17 @@ can collide with. A menu with no arguments left to consume *is* the list.
 
 The tree is not limited to `install`. `update`, `theme` and anything else the
 distro wants to expose are root nodes in the catalog like any other, which is
-what lets kuuhaku-os add a whole command group without a jibril release.
+what lets kuuhaku-os add a whole command group without a shiro release.
 
 Alongside the tree there are **native commands**, implemented in Rust, for the
 things that require seeing the engine's own state:
 
 | Command | Purpose |
 | --- | --- |
-| `jibril doctor` | Environment report: which layers loaded, which mechanisms are available on this host. |
-| `jibril catalog validate` | Parses every layer, enforces the schema rules in section 4, exits non-zero on violation. |
-| `jibril catalog sources` | Prints each loaded layer and which nodes it contributed or overrode. |
-| `jibril version` | Version, and the digest of the merged catalog. |
+| `shiro doctor` | Environment report: which layers loaded, which mechanisms are available on this host. |
+| `shiro catalog validate` | Parses every layer, enforces the schema rules in section 4, exits non-zero on violation. |
+| `shiro catalog sources` | Prints each loaded layer and which nodes it contributed or overrode. |
+| `shiro version` | Version, and the digest of the merged catalog. |
 
 Native commands live under a namespace that the catalog may not claim. The
 validator enforces that: a catalog defining a root node named `doctor` fails to
@@ -50,10 +50,10 @@ Four layers, lowest precedence first:
 
 | Layer | Location | Owner |
 | --- | --- | --- |
-| built-in | embedded in the binary at build time from `catalog/` | the jibril repo: the base curation |
-| image | `/usr/share/jibril/catalog/` | the distro image (kuuhaku-os) |
-| machine | `/etc/jibril/catalog/` | the machine administrator |
-| user | `$XDG_DATA_HOME/jibril/catalog/` (default `~/.local/share/jibril/catalog/`) | the user, per user |
+| built-in | embedded in the binary at build time from `catalog/` | the shiro repo: the base curation |
+| image | `/usr/share/shiro/catalog/` | the distro image (kuuhaku-os) |
+| machine | `/etc/shiro/catalog/` | the machine administrator |
+| user | `$XDG_DATA_HOME/shiro/catalog/` (default `~/.local/share/shiro/catalog/`) | the user, per user |
 
 The built-in layer exists so that a freshly built binary is useful with no
 files on disk, and so the base curation is versioned with the engine that runs
@@ -67,7 +67,7 @@ ones wholesale: there is no field-level merge, because a half-overridden recipe
 is impossible to reason about when a hook fails. To suppress an inherited node
 without replacing it, declare it with `hidden = true`.
 
-`jibril catalog sources` exists to answer "why is this item behaving like
+`shiro catalog sources` exists to answer "why is this item behaving like
 that", which is otherwise the worst class of bug an override system produces.
 
 ## 3. Catalog format
@@ -77,7 +77,7 @@ irrelevant: the path comes from the declarations, not the filesystem, so a
 layer can split or merge files freely without moving nodes.
 
 ```toml
-# /usr/share/jibril/catalog/code.toml
+# /usr/share/shiro/catalog/code.toml
 
 [[menu]]
 path  = "install.code"
@@ -165,7 +165,7 @@ removal genuinely differs from undoing a broken transaction.
 
 `check` (gate) → `pre` → `install` → `post`.
 
-`check` runs first on the chosen item. If it reports installed, `jibril install
+`check` runs first on the chosen item. If it reports installed, `shiro install
 <item>` **refuses and explains**, and suggests `--force`. Recipes are written by
 hand and idempotence cannot be proven by a validator, so re-running one by
 accident is a real way to break a working system. `--force` skips the gate and
@@ -213,11 +213,11 @@ where it is:
 
 | Variable | Meaning |
 | --- | --- |
-| `JIBRIL_ITEM` | Full node path of the item being acted on. |
-| `JIBRIL_PHASE` | The hook currently running. |
-| `JIBRIL_RECIPE_DIR` | Directory of the TOML file that declared the item, for locating sibling scripts and assets. |
-| `JIBRIL_LAYER` | Which layer the item came from. |
-| `JIBRIL_DRY_RUN` | `1` when running under `--dry-run`. |
+| `SHIRO_ITEM` | Full node path of the item being acted on. |
+| `SHIRO_PHASE` | The hook currently running. |
+| `SHIRO_RECIPE_DIR` | Directory of the TOML file that declared the item, for locating sibling scripts and assets. |
+| `SHIRO_LAYER` | Which layer the item came from. |
+| `SHIRO_DRY_RUN` | `1` when running under `--dry-run`. |
 
 `--dry-run` prints the exact command each hook would run, resolved, without
 executing it. A tool whose job is to run arbitrary scripts as root owes the
@@ -227,7 +227,7 @@ user a way to read them first.
 
 `--json` on any invocation. This is the contract the Vicinae extension is
 written against, so it is versioned: the payload carries a `schema` field and a
-breaking change to it is a breaking change to jibril.
+breaking change to it is a breaking change to shiro.
 
 Listing a menu:
 
@@ -254,7 +254,7 @@ Listing a menu:
 
 `status` is one of `installed`, `absent`, `unknown` (no `check` declared, or it
 would require elevation) or `timeout`. A front end uses it to decide which
-action to offer, and then **invokes that action explicitly**: jibril has no
+action to offer, and then **invokes that action explicitly**: shiro has no
 toggle command, because a menu acting on a stale status would uninstall
 something the user meant to install.
 
@@ -264,7 +264,7 @@ outcome and the exit code.
 
 ## 7. State
 
-jibril keeps no database of what it installed. The truth about whether Visual
+shiro keeps no database of what it installed. The truth about whether Visual
 Studio Code is present is held by Flatpak, and a second copy of that truth
 would be a copy that drifts. `check` asks the system, every time.
 
