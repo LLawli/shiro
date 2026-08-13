@@ -38,6 +38,8 @@ things that require seeing the engine's own state:
 | `shiro catalog validate` | Parses every layer, enforces the schema rules in section 4, exits non-zero on violation. |
 | `shiro catalog sources` | Prints each loaded layer and which nodes it contributed or overrode. |
 | `shiro version` | Version, and the digest of the merged catalog. |
+| `shiro perms <backend> …` | The permissions module, section 9. |
+| `shiro run <app> [args]` | Launches a native application under bwrap, section 9. |
 
 Native commands live under a namespace that the catalog may not claim. The
 validator enforces that: a catalog defining a root node named `doctor` fails to
@@ -98,6 +100,9 @@ install      = "flatpak install --user -y flathub com.visualstudio.code"
 post         = { file = "scripts/vs-code-post.sh" }
 roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 ```
+
+An item may also declare `[item.permissions]`, which the engine records into
+the profile registry and does nothing else with. See section 9.
 
 **A hook is a shell command or a script file.** A string is passed to `sh -c`,
 which covers the one-liner and, as a multi-line string, the short inline
@@ -276,9 +281,114 @@ is bounded, parallel, and never elevated.
 ```
 Cargo.toml
 src/                    # the engine: parse, resolve, execute, report
+src/perms/              # the permissions module, section 9
 catalog/                # base curation, embedded into the binary at build time
+profiles/               # base bwrap profiles, embedded alongside the catalog
 docs/                   # this file, vision.md, decisions.md
 packaging/install.sh    # verified installer, mirroring sora's
 tests/
 .github/workflows/      # CI and release
 ```
+
+## 9. The permissions module
+
+The engine is forbidden from knowing mechanisms (section 5, and the first rule
+in `CLAUDE.md`). This module is the single, delimited exception: knowing about
+Flatpak overrides and bwrap *is* its purpose. The boundary that keeps the
+exception from spreading is that the module is only reachable through its own
+native commands and through one declarative field, and the recipe executor
+never calls into it.
+
+Two surfaces, and they do not overlap.
+
+### `shiro perms <backend> …`
+
+For applications that already have a permission mechanism. Today that means
+Flatpak, where shiro drives `flatpak override` rather than inventing storage of
+its own.
+
+**The backend is always explicit**: `shiro perms flatpak <app> …` and
+`shiro perms run <app> …`. Never inferred from the application name. A
+permission tool that guesses which mechanism it is talking to cannot be
+audited, and being auditable is most of the value here. The verbosity is the
+feature.
+
+### `shiro run <app> [args…]`
+
+For native applications, which have no permission mechanism of their own. It
+resolves a profile, builds the bwrap invocation from it, and execs the program.
+
+**The fallback is close to nothing.** An application with no profile still
+runs, under a sandbox that grants the minimum a process needs to start and
+nothing else: no network, no home, no devices, no session bus. The application
+will fail to do most of what it wants, and that is the intended outcome, so the
+failure has to be legible: falling back prints a warning to stderr naming the
+profile that was looked for and where a profile could be placed.
+
+Failing open (running unconfined when a profile is missing) was never
+considered. A sandbox that silently disappears is worse than no sandbox,
+because the user believes it is there.
+
+### Profiles
+
+Profiles are TOML, one per application, in four layers with the same precedence
+as the catalog:
+
+| Layer | Location |
+| --- | --- |
+| built-in | embedded in the binary from `profiles/` |
+| image | `/usr/share/shiro/profiles/` |
+| machine | `/etc/shiro/profiles/` |
+| user | `$XDG_DATA_HOME/shiro/profiles/` |
+
+A higher layer replaces a profile wholesale, exactly as with catalog nodes, and
+for the same reason: a half-overridden sandbox is a sandbox nobody can reason
+about. **The user layer may loosen**, not only tighten. This is a single-user
+workstation tool, and a user who cannot grant their own browser a directory
+will edit a `.desktop` file to bypass `shiro run` entirely, which is a strictly
+worse outcome than letting them write the profile.
+
+### `[item.permissions]` in a recipe
+
+A recipe may declare the profile for what it installs:
+
+```toml
+[item.permissions]
+backend = "run"          # run | flatpak
+app     = "brave"
+# backend-specific body follows
+```
+
+**The engine records this and does nothing else with it.** It writes the entry
+into the profile registry, and that is the entire extent of the interaction:
+
+- it does not invoke bwrap or flatpak;
+- it does not generate a wrapper script;
+- it does not generate or edit a `.desktop` file.
+
+Generating the executable or the desktop entry that calls `shiro run` is the
+recipe's `post`, like any other configuration work. This keeps the split
+honest: the declaration is data the module owns, and the wiring is a recipe
+concern the engine does not understand.
+
+**Which layer receives the write** follows the item's `privilege`: a `system`
+item writes to `/etc/shiro/profiles/` and a `user` item to
+`$XDG_DATA_HOME/shiro/profiles/`. Never `/usr/share`, which belongs to the
+image and is read-only on bootc.
+
+**Rollback:** the registry write is the one mutation the engine performs on its
+own initiative, so the engine owns undoing it. It is reverted with the rest of
+the transaction under the item's rollback policy, without the recipe declaring
+anything.
+
+### Open: one binary or two
+
+`shiro run` sits in the hottest path in the system, executed on every launch of
+every sandboxed application, where the engine's catalog machinery is dead
+weight. A separate, smaller `shiro-run` binary would start faster at the cost
+of a second artifact to build, ship and version.
+
+Deferred until it can be measured: build both, compare cold start on the launch
+path, and split only if the difference is perceptible when an application
+starts. Deciding now would be guessing, and the guess is cheap to defer because
+the wrappers a recipe generates call a command name, not a code path.

@@ -46,6 +46,30 @@ recipe, so a new one costs a TOML file rather than a release.
 - **Rust, for startup.** The binary is ephemeral and spawned once per menu
   navigation step.
 
+## Permissions
+
+Installing a tool and deciding what it may touch arrive at the same moment, so
+shiro owns both. Modestly:
+
+```sh
+shiro perms flatpak brave --nofilesystem=home   # drives flatpak override
+shiro perms run brave                           # the bwrap profile for a native app
+shiro run brave                                 # launches it under that profile
+```
+
+`shiro perms` always names its backend, so what is being changed is never
+inferred. `shiro run` launches native applications under bwrap according to a
+declared profile, and an application with no profile runs under a fallback that
+grants close to nothing, loudly. Profiles layer exactly like the catalog does.
+
+A recipe can declare `[item.permissions]` for what it installs. The engine
+records the profile and nothing more: generating the wrapper or `.desktop` that
+calls `shiro run` is the recipe's own `post`.
+
+This is not a policy engine and does not try to be firejail. It is the smallest
+thing that makes "the browser runs sandboxed even though it is not a Flatpak"
+true.
+
 ## The menu
 
 shiro renders nothing. The menu is a [Vicinae](https://vicinae.com) extension

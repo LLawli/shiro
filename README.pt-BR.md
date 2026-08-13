@@ -48,6 +48,29 @@ numa receita, então um mecanismo novo custa um arquivo TOML, não uma release.
 - **Rust, por causa da partida.** O binário é efêmero e nasce de novo a cada
   passo de navegação no menu.
 
+## Permissões
+
+Instalar uma ferramenta e decidir o que ela pode tocar acontecem no mesmo
+momento, então o shiro cuida das duas coisas. De forma modesta:
+
+```sh
+shiro perms flatpak brave --nofilesystem=home   # aciona o flatpak override
+shiro perms run brave                           # o perfil bwrap de um app nativo
+shiro run brave                                 # lança o app sob esse perfil
+```
+
+O `shiro perms` sempre nomeia o backend, então nunca se infere o que está sendo
+alterado. O `shiro run` lança aplicações nativas sob bwrap conforme um perfil
+declarado, e um app sem perfil roda num fallback que não concede quase nada, de
+forma barulhenta. Os perfis têm as mesmas camadas do catálogo.
+
+Uma receita pode declarar `[item.permissions]` para o que instala. O motor
+registra o perfil e nada além disso: gerar o wrapper ou o `.desktop` que chama
+o `shiro run` é trabalho do `post` da própria receita.
+
+Isso não é um motor de política e não tenta ser o firejail. É a menor coisa que
+torna verdadeira a frase "o navegador roda em sandbox mesmo não sendo Flatpak".
+
 ## O menu
 
 O shiro não desenha nada. O menu é uma extensão do
