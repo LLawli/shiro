@@ -52,14 +52,16 @@ Four layers, lowest precedence first:
 
 | Layer | Location | Owner |
 | --- | --- | --- |
-| built-in | embedded in the binary at build time from `catalog/` | the shiro repo: the base curation |
+| built-in | embedded in the binary at build time from `catalog/` | the shiro repo: the root nodes, and no recipes |
 | image | `/usr/share/shiro/catalog/` | the distro image (kuuhaku-os) |
 | machine | `/etc/shiro/catalog/` | the machine administrator |
 | user | `$XDG_DATA_HOME/shiro/catalog/` (default `~/.local/share/shiro/catalog/`) | the user, per user |
 
-The built-in layer exists so that a freshly built binary is useful with no
-files on disk, and so the base curation is versioned with the engine that runs
-it. The image layer is how a distro ships its own opinions. The machine layer
+The built-in layer holds the root nodes (`install`, `update`, `theme`) so that a
+freshly built binary has a command surface with a stable shape, and so a layer
+above only has to declare children. It holds no recipes: those live in the layer
+that can ship a change without a shiro release. The image layer is how a distro
+ships its own opinions. The machine layer
 earns its place on bootc specifically: `/usr` is the image and `/etc` belongs
 to the machine, so `/etc` is the only writable place an administrator can add
 a recipe without rebuilding an image.

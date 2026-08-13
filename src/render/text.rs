@@ -2,6 +2,7 @@
 //! was available where the path stopped matching.
 
 use crate::catalog::Kind;
+use crate::layers::{self, Layer};
 use crate::render::Listing;
 
 pub fn menu(listing: &Listing<'_>) -> String {
@@ -15,7 +16,16 @@ pub fn menu(listing: &Listing<'_>) -> String {
     }
 
     if listing.children.is_empty() {
-        out.push_str("\n  (nothing here)\n");
+        // The built-in layer holds the root nodes and no recipes, so an empty
+        // menu is what a fresh binary shows. Saying where children come from
+        // turns that from a dead end into an instruction.
+        out.push_str("\n  (nothing here yet)\n\n");
+        out.push_str("  Recipes come from a catalog layer:\n");
+        for layer in [Layer::Image, Layer::Machine, Layer::User] {
+            if let Some(dir) = layers::dir(layer, "catalog") {
+                out.push_str(&format!("    {:8}  {}\n", layer.as_str(), dir.display()));
+            }
+        }
         return out;
     }
 

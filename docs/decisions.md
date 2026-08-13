@@ -101,6 +101,28 @@ the way to answer it is a declared probe, in the catalog, next to the label it
 belongs to. That adds schema, so it waits for a real need rather than a
 hypothetical one.
 
+## The curation does not ship inside the engine
+
+The built-in layer holds the root nodes (`install`, `update`, `theme`) and no
+recipes. The recipes live in the image layer, which for this ecosystem means
+kuuhaku-os.
+
+The alternative was tempting for one reason: a freshly cloned, freshly compiled
+shiro would do something. It loses on the reason the whole design exists.
+Mechanisms change on someone else's schedule, and a recipe embedded in the
+binary turns "flatpak grew a flag" into a shiro release, which is exactly the
+coupling the engine was shaped to avoid. It would also put Fedora-specific
+curation inside a binary that assumes nothing beyond a POSIX shell.
+
+What is kept is the small, stable part: the root nodes give a front end a
+command surface with a fixed shape and consistent titles, and a layer above only
+declares children under them. A root can still be replaced outright, since merge
+is per node path.
+
+The cost is that `shiro install` on a bare machine lists nothing, so it says so
+and names the three directories a layer can be placed in. An empty menu that
+explains itself is a different thing from an empty menu.
+
 ## The built-in layer holds TOML and nothing else
 
 A `{ file = "..." }` hook in the built-in layer is a validation error, and the

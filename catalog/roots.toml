@@ -1,0 +1,27 @@
+# The built-in layer holds the root nodes and nothing else.
+#
+# The curation lives in the layer above this one, which for kuuhaku-os is the
+# image layer. What is here is the part that does not move: the groups a front
+# end draws, in a fixed order, with titles that read the same on every machine
+# whatever a layer above adds underneath them.
+#
+# A layer adds children by declaring them under these paths. It can also replace
+# a root outright, since merge is per node path and wholesale.
+
+[[menu]]
+path        = "install"
+title       = "Install"
+description = "Add something to this system"
+order       = 10
+
+[[menu]]
+path        = "update"
+title       = "Update"
+description = "Bring what is installed up to date"
+order       = 20
+
+[[menu]]
+path        = "theme"
+title       = "Theme"
+description = "Change how the desktop looks"
+order       = 30

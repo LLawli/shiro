@@ -225,3 +225,49 @@ fn naming_an_item_runs_its_recipe_and_the_gate_comes_first() {
         stderr(&out)
     );
 }
+
+#[test]
+fn the_built_in_layer_gives_a_bare_machine_a_command_surface() {
+    // No layers on disk at all: what is left is what ships in the binary.
+    let out = shiro("no-such-fixture", &["--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let payload = json(&out);
+    let roots: Vec<&str> = payload["children"]
+        .as_array()
+        .expect("children is a list")
+        .iter()
+        .map(|child| child["path"].as_str().expect("a path"))
+        .collect();
+
+    assert_eq!(roots, ["install", "update", "theme"]);
+    assert!(
+        payload["children"]
+            .as_array()
+            .expect("children is a list")
+            .iter()
+            .all(|child| child["layer"] == "built-in")
+    );
+}
+
+#[test]
+fn an_empty_menu_says_where_recipes_come_from() {
+    // The built-in layer declares roots and no recipes, so this is the first
+    // thing a fresh install shows. It has to be an instruction, not a dead end.
+    let out = shiro("no-such-fixture", &["install"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let printed = stdout(&out);
+    assert!(printed.contains("nothing here yet"), "{printed}");
+    assert!(printed.contains("shiro/catalog"), "{printed}");
+    assert!(printed.contains("image"), "{printed}");
+    assert!(printed.contains("user"), "{printed}");
+}
+
+#[test]
+fn the_built_in_layer_validates_on_its_own() {
+    // The layer that ships inside the binary is held to the schema it enforces.
+    let out = shiro("no-such-fixture", &["catalog", "validate", "--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(json(&out)["ok"], true);
+}
