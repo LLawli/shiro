@@ -260,10 +260,7 @@ fn bwrap_works() -> bool {
 
     let probe = match probe {
         Ok(probe) => probe,
-        Err(err) => {
-            eprintln!("skipped: bwrap is not on this host ({err})");
-            return false;
-        }
+        Err(err) => return skip(&format!("bwrap is not on this host ({err})")),
     };
 
     if probe.status.success() {
@@ -282,9 +279,22 @@ fn bwrap_works() -> bool {
         why.trim()
     );
 
-    eprintln!(
-        "skipped: bwrap cannot create a sandbox here ({})",
+    skip(&format!(
+        "bwrap cannot create a sandbox here ({})",
         why.trim()
+    ))
+}
+
+/// Skipping is right on a machine with no bwrap and wrong in CI, where these are
+/// the only tests that exercise the sandbox at all. `SHIRO_REQUIRE_SANDBOX`
+/// turns a skip into a failure, so the coverage cannot go quietly missing where
+/// it is supposed to exist.
+fn skip(why: &str) -> bool {
+    assert!(
+        std::env::var_os("SHIRO_REQUIRE_SANDBOX").is_none(),
+        "SHIRO_REQUIRE_SANDBOX is set, and the sandbox tests cannot run: {why}"
     );
+
+    eprintln!("skipped: {why}");
     false
 }

@@ -17,6 +17,19 @@ jobs:
       - name: Install the toolchain
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
 
+      # The sandbox tests are the only ones that exercise `shiro run` end to
+      # end, and they skip themselves where bwrap cannot build a sandbox. That
+      # is right on a developer's machine and wrong here, so CI installs it and
+      # sets SHIRO_REQUIRE_SANDBOX, which turns a skip into a failure.
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces through AppArmor,
+          # which is what bwrap needs and what the runner has no other way to
+          # grant. Failing softly here would put us back to a silent skip, so
+          # the setting is relaxed and the test step is what reports the truth.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
       - name: Format
         run: cargo fmt --check
 
@@ -25,6 +38,8 @@ jobs:
 
       - name: Test
         run: cargo test
+        env:
+          SHIRO_REQUIRE_SANDBOX: 1
 
       # The release profile is what ships, and it is the one that can fail on
       # its own (lto, panic = "abort"), so it is built here rather than first
