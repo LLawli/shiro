@@ -34,7 +34,7 @@ things that require seeing the engine's own state:
 
 | Command | Purpose |
 | --- | --- |
-| `shiro doctor` | Environment report: which layers loaded, which mechanisms are available on this host. |
+| `shiro doctor` | Environment report: which layers loaded, what each contributed, and which `mechanism` labels the catalog uses. |
 | `shiro catalog validate` | Parses every layer, enforces the schema rules in section 4, exits non-zero on violation. |
 | `shiro catalog sources` | Prints each loaded layer and which nodes it contributed or overrode. |
 | `shiro version` | Version, and the digest of the merged catalog. |
@@ -69,8 +69,16 @@ ones wholesale: there is no field-level merge, because a half-overridden recipe
 is impossible to reason about when a hook fails. To suppress an inherited node
 without replacing it, declare it with `hidden = true`.
 
+Within one layer, two files declaring the same path is an error rather than a
+race: the winner would depend on the order the filesystem happened to return.
+
 `shiro catalog sources` exists to answer "why is this item behaving like
 that", which is otherwise the worst class of bug an override system produces.
+
+**`SHIRO_ROOT` reroots the two system layers**, so that `/usr/share` and `/etc`
+are read from under it instead. It exists so the loader can be exercised, and
+another machine's catalog inspected, without writing to either directory. The
+user layer needs nothing of the sort: `XDG_DATA_HOME` already moves it.
 
 ## 3. Catalog format
 
@@ -104,6 +112,21 @@ roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 An item may also declare `[item.permissions]`, which the engine records into
 the profile registry and does nothing else with. See section 9.
 
+**A path is segments joined by dots, and a segment is what the user types.** A
+segment matches `[a-z0-9][a-z0-9_-]*`: it is lowercase, and it never needs
+quoting, because a segment that has to be quoted is a segment nobody can type
+out of a menu. A malformed path is refused at load, not reported as a finding:
+the tree cannot hold it.
+
+**`order` sorts a menu's children, and the title breaks ties.** A child with no
+`order` sorts after every child that has one. A catalog assembled from four
+layers is partially ordered most of the time, and the ones that declared an
+order should stay where they were put.
+
+**An unknown key is an error, everywhere.** Catalogs are hand-written, and
+silently ignoring `mechnism = "flatpak"` produces an item whose author believes
+they set a field they did not.
+
 **A hook is a shell command or a script file.** A string is passed to `sh -c`,
 which covers the one-liner and, as a multi-line string, the short inline
 script. A `{ file = "..." }` table points at a script relative to the directory
@@ -135,8 +158,22 @@ Schema rules the validator enforces:
   `pre_mutates = true` on the item; the validator rejects the combination of
   `pre_mutates` and a missing `roll-pre`;
 - an item with `install` must declare `roll-install` unless `rollback = "none"`;
-- `check` may not be a `{ file = ... }` pointing outside its layer, and may not
-  declare `privilege = "system"` (see below).
+- a root node may not claim a name in the native namespace;
+- every node below the root needs a declared parent, and that parent must be a
+  menu: an item has no children, and an orphan is a node nobody can navigate to;
+- a `{ file = ... }` hook is relative to its own recipe: it may not be absolute,
+  may not climb out with `..`, and must exist. This is checked for every hook,
+  not only `check`;
+- a `{ file = ... }` hook may not appear in the built-in layer at all, which is
+  embedded in the binary and has no directory on disk. Inline the script;
+- `[item.permissions]` names `run` or `flatpak` as its backend, and a non-empty
+  `app`.
+
+Two rules from this section are enforced before validation and so never appear
+as findings. A malformed path is refused by the loader. A hook carrying anything
+beyond `file` is refused by the parser, which is the only place that can name
+the stray key, and that is what keeps `privilege = "system"` off a `check`: a
+hook has no `privilege` field to set.
 
 ### `check` is a special hook
 
@@ -149,7 +186,10 @@ menu is being drawn. Three rules follow from that, and all three are hard:
    `unknown`, which is an honest answer and a cheap one.
 3. **Bounded.** Every `check` runs under a timeout; exceeding it yields
    `timeout`, not a hang. A front end drawing a list gets an answer for every
-   child in bounded time or a clear reason it did not.
+   child in bounded time or a clear reason it did not. The timeout is three
+   seconds, overridable with `SHIRO_CHECK_TIMEOUT` in whole seconds. A check
+   also gets no stdin and has its output discarded: a hook that stops to ask a
+   question times out rather than blocking the menu that called it.
 
 Batch invocation runs the children's checks in parallel. This is not an
 optimization detail, it is the contract: 200 serial process spawns per menu
@@ -256,6 +296,18 @@ Listing a menu:
   ]
 }
 ```
+
+The root is a menu like any other, and it is the one no catalog declares: it
+lists with `"path": ""` and `"title": "shiro"`.
+
+**A field with no value is omitted, never emitted as null**, so that a
+consumer's "is it absent" and "is it empty" are the same check. A child that is
+a menu therefore carries no `mechanism`, `privilege` or `status`.
+
+The native commands answer in the same shape when given `--json`: a `schema`
+field, a `kind` naming the payload (`doctor`, `version`, `validation`,
+`sources`), and the body. They are versioned by the same field for the same
+reason.
 
 `status` is one of `installed`, `absent`, `unknown` (no `check` declared, or it
 would require elevation) or `timeout`. A front end uses it to decide which

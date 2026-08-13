@@ -1,0 +1,17 @@
+# The user layer: a private group, in a home directory.
+
+[[menu]]
+path  = "install.games"
+title = "Games"
+order = 30
+
+[[item]]
+path      = "install.games.steam"
+title     = "Steam"
+mechanism = "flatpak"
+
+# A check that never answers. It reports `timeout` rather than hanging a menu.
+[item.hooks]
+check        = "sleep 30"
+install      = "true"
+roll-install = "true"

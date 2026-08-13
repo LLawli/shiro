@@ -86,6 +86,33 @@ through its own native commands and one declarative field, and by the recipe
 executor never calling into it. The rule above is therefore about the executor,
 precisely: no branch on `mechanism`, anywhere, for any reason.
 
+## `doctor` reports the labels a catalog uses, and does not probe the host
+
+`shiro doctor` says which layers loaded, what each contributed, and how many
+items carry each `mechanism` label. It does not say whether Flatpak is installed.
+
+Reporting availability would require knowing what a label means, which is the
+one thing the engine may not know. The near miss is worse than the obvious
+violation: checking for an executable whose name matches the label reads as
+neutral, and quietly makes `mechanism` a dispatch key with one user.
+
+**Open:** if "can this host run these recipes" turns out to be worth answering,
+the way to answer it is a declared probe, in the catalog, next to the label it
+belongs to. That adds schema, so it waits for a real need rather than a
+hypothetical one.
+
+## The built-in layer holds TOML and nothing else
+
+A `{ file = "..." }` hook in the built-in layer is a validation error, and the
+fix is to inline the script. The layer is embedded in the binary at build time,
+so a path relative to "the directory of the TOML that declared it" points at a
+directory that does not exist on the host.
+
+Rejected embedding the scripts too and extracting them at run time: it puts a
+temporary directory and a write in the launch path of every recipe, to serve a
+base curation that does not need it. If the base curation ever grows a script
+long enough to be worth a file, this decision is what should be revisited.
+
 ## No state database
 
 The engine records nothing about what it installed. `check` asks the system.
@@ -268,6 +295,17 @@ requires no special casing.
 with its own release cadence, so the payload is an interface between two
 independently versioned things, and interfaces that are not versioned break
 silently at the worst moment.
+
+## The catalog digest covers what nodes declare, not where they live
+
+`shiro version` prints a short digest of the merged catalog: sixteen hex
+characters of a sha256 over each node's declaration, in path order.
+
+It deliberately does not cover the file paths the nodes came from, so that the
+same catalog reached through a different mount point digests the same. It is a
+"are these two machines running the same curation" answer, which is the question
+that comes up when a recipe behaves differently on two hosts. It is not an
+attestation, and the catalog is trusted input already: it runs shell.
 
 ## No toggle command
 

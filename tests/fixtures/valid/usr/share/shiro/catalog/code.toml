@@ -1,0 +1,43 @@
+# The image layer: what a distro ships.
+
+[[menu]]
+path  = "install"
+title = "Install"
+order = 10
+
+[[menu]]
+path  = "install.code"
+title = "Code editors"
+order = 20
+
+[[item]]
+path        = "install.code.vs-code"
+title       = "Visual Studio Code"
+description = "Microsoft's editor, Flatpak build"
+mechanism   = "flatpak"
+privilege   = "user"
+rollback    = "atomic"
+order       = 10
+
+[item.hooks]
+check        = "true"
+install      = "true"
+roll-install = "true"
+
+[[item]]
+path      = "install.code.zed"
+title     = "Zed"
+mechanism = "flatpak"
+order     = 20
+
+[item.hooks]
+check        = "false"
+install      = "true"
+roll-install = "true"
+
+[[item]]
+path      = "install.code.helix"
+title     = "Helix"
+mechanism = "rpm-ostree"
+order     = 30
+rollback  = "none"

@@ -1,0 +1,18 @@
+# The machine layer: an administrator replacing one node wholesale, and hiding
+# another without replacing it.
+
+[[item]]
+path      = "install.code.zed"
+title     = "Zed, from the machine's own box"
+mechanism = "distrobox"
+order     = 20
+
+[item.hooks]
+check        = "true"
+install      = "true"
+roll-install = "true"
+
+[[item]]
+path   = "install.code.helix"
+title  = "Helix"
+hidden = true

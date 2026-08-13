@@ -9,31 +9,64 @@
 //! node with one of these names, because a shadowed command is worse than a
 //! rejected one: it fails as a command that quietly does the wrong thing.
 
-/// What the arguments turned out to be. Each variant carries what is left after
-/// the command word is consumed, unparsed: flags belong to whoever handles them.
+use crate::error::Error;
+
+/// The names the catalog may not claim as root nodes.
+pub const NATIVE: [&str; 5] = ["doctor", "catalog", "version", "perms", "run"];
+
+/// What the arguments turned out to be.
 pub enum Invocation {
-    Doctor(Vec<String>),
-    Catalog(Vec<String>),
-    Version(Vec<String>),
+    Doctor(Vec<String>, Options),
+    Catalog(Vec<String>, Options),
+    Version(Vec<String>, Options),
+    /// Everything after `perms` is handed over unparsed: the backend owns its
+    /// own arguments.
     Perms(Vec<String>),
+    /// Likewise, and more so: every argument after the application name belongs
+    /// to the application, not to shiro.
     Run(Vec<String>),
     /// A path into the catalog. A menu lists itself, an item runs its recipe,
     /// and an empty path is the root menu.
-    Path(Vec<String>),
+    Path(Vec<String>, Options),
 }
 
-pub fn parse(args: &[String]) -> Invocation {
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Options {
+    pub json: bool,
+}
+
+pub fn parse(args: &[String]) -> Result<Invocation, Error> {
     let Some((head, rest)) = args.split_first() else {
-        return Invocation::Path(Vec::new());
+        return Ok(Invocation::Path(Vec::new(), Options::default()));
     };
-    let rest = rest.to_vec();
 
     match head.as_str() {
-        "doctor" => Invocation::Doctor(rest),
-        "catalog" => Invocation::Catalog(rest),
-        "version" => Invocation::Version(rest),
-        "perms" => Invocation::Perms(rest),
-        "run" => Invocation::Run(rest),
-        _ => Invocation::Path(args.to_vec()),
+        "perms" => Ok(Invocation::Perms(rest.to_vec())),
+        "run" => Ok(Invocation::Run(rest.to_vec())),
+        "doctor" => flagged(rest).map(|(rest, opts)| Invocation::Doctor(rest, opts)),
+        "catalog" => flagged(rest).map(|(rest, opts)| Invocation::Catalog(rest, opts)),
+        "version" => flagged(rest).map(|(rest, opts)| Invocation::Version(rest, opts)),
+        _ => flagged(args).map(|(rest, opts)| Invocation::Path(rest, opts)),
     }
+}
+
+/// Pull the flags shiro understands out of the arguments, wherever they sit, and
+/// leave the rest in order. An unknown flag is refused rather than passed on as
+/// a path segment: `shiro install code --jsno` should not report that `--jsno`
+/// is not a command.
+fn flagged(args: &[String]) -> Result<(Vec<String>, Options), Error> {
+    let mut opts = Options::default();
+    let mut rest = Vec::new();
+
+    for arg in args {
+        match arg.as_str() {
+            "--json" => opts.json = true,
+            flag if flag.starts_with('-') => {
+                return Err(Error::Usage(format!("unknown flag `{flag}`")));
+            }
+            _ => rest.push(arg.clone()),
+        }
+    }
+
+    Ok((rest, opts))
 }

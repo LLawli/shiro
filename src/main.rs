@@ -1,13 +1,9 @@
 //! shiro turns a curated TOML catalog into an executable, navigable command
 //! tree, and owns what the tools it installs are allowed to touch.
-//!
-//! This is the scaffold: the module layout of `docs/architecture.md` section 8
-//! exists and compiles, the argument split between the reserved native
-//! namespace and the catalog path is real, and every entry point reports that
-//! it has no behavior yet.
 
 mod catalog;
 mod cli;
+mod dispatch;
 mod error;
 mod exec;
 mod native;
@@ -32,12 +28,12 @@ fn main() -> ExitCode {
 }
 
 fn run(args: &[String]) -> Result<(), Error> {
-    match cli::parse(args) {
-        Invocation::Doctor(rest) => native::doctor(rest),
-        Invocation::Catalog(rest) => native::catalog(rest),
-        Invocation::Version(rest) => native::version(rest),
+    match cli::parse(args)? {
+        Invocation::Doctor(rest, opts) => native::doctor(rest, opts),
+        Invocation::Catalog(rest, opts) => native::catalog(rest, opts),
+        Invocation::Version(rest, opts) => native::version(rest, opts),
         Invocation::Perms(rest) => perms::perms(rest),
         Invocation::Run(rest) => perms::run(rest),
-        Invocation::Path(rest) => catalog::dispatch(rest),
+        Invocation::Path(rest, opts) => dispatch::path(&rest, &opts),
     }
 }

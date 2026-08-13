@@ -1,0 +1,70 @@
+# Every rule the validator enforces, broken once.
+
+# A root node claiming a native command.
+[[menu]]
+path  = "doctor"
+title = "Not the doctor"
+
+# An item whose parent nothing declares.
+[[item]]
+path  = "nowhere.orphan"
+title = "Orphan"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[[menu]]
+path  = "broken"
+title = "Broken"
+
+# An install with no way back, under the default atomic policy.
+[[item]]
+path  = "broken.no-rollback"
+title = "No rollback"
+
+[item.hooks]
+install = "true"
+
+# A pre that mutates and cannot be undone.
+[[item]]
+path        = "broken.mutating-pre"
+title       = "Mutating pre"
+pre_mutates = true
+
+[item.hooks]
+pre          = "true"
+install      = "true"
+roll-install = "true"
+
+# A script that is not next to its recipe, and one that climbs out of the layer.
+[[item]]
+path  = "broken.missing-script"
+title = "Missing script"
+
+[item.hooks]
+check        = { file = "nowhere.sh" }
+install      = { file = "../escape.sh" }
+roll-install = "true"
+
+# A backend that does not exist, and an empty application name.
+[[item]]
+path  = "broken.bad-permissions"
+title = "Bad permissions"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[item.permissions]
+backend = "podman"
+app     = "   "
+
+# An item declared as a child of an item.
+[[item]]
+path  = "broken.no-rollback.child"
+title = "Child of an item"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
