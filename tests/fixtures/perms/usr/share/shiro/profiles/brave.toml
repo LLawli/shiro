@@ -1,0 +1,15 @@
+# A native application that is not a Flatpak, confined anyway.
+
+backend = "run"
+app     = "brave"
+
+[run]
+command    = "/usr/bin/true"
+network    = true
+share      = ["wayland", "pipewire"]
+devices    = ["dri"]
+read-only  = ["/etc/fonts"]
+read-write = ["~/Downloads"]
+
+[run.env]
+MOZ_ENABLE_WAYLAND = "1"

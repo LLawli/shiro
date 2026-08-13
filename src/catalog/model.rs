@@ -172,7 +172,6 @@ pub struct PermissionsDecl {
     /// Read by the profile registry when the engine records the declaration.
     /// It is captured rather than ignored because dropping it here would make
     /// a recipe's profile silently smaller than what its author wrote.
-    #[expect(dead_code, reason = "consumed by perms::registry, not yet written")]
     #[serde(flatten)]
     pub body: toml::Table,
 }

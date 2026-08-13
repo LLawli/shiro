@@ -93,3 +93,35 @@ privilege = "system"
 [item.hooks]
 install      = 'echo system >> "$STATE/log"'
 roll-install = 'true'
+
+# The engine records this into the profile registry, between install and post,
+# and takes it back out if the transaction is undone.
+[[item]]
+path  = "demo.confined"
+title = "Installs and declares a profile"
+
+[item.hooks]
+install      = 'true'
+roll-install = 'echo roll-install >> "$STATE/log"'
+post         = 'test -f "$XDG_DATA_HOME/shiro/profiles/demo-app.toml" && echo post >> "$STATE/log"'
+
+[item.permissions]
+backend = "run"
+app     = "demo-app"
+
+[item.permissions.run]
+command = "/usr/bin/true"
+network = true
+
+[[item]]
+path  = "demo.confined-fails"
+title = "Records a profile, then fails"
+
+[item.hooks]
+install      = 'true'
+roll-install = 'echo roll-install >> "$STATE/log"'
+post         = 'exit 1'
+
+[item.permissions]
+backend = "run"
+app     = "demo-ghost"

@@ -1,0 +1,8 @@
+# The same application as a Flatpak, where the mechanism is flatpak's own.
+
+backend = "flatpak"
+app     = "com.brave.Browser"
+
+[flatpak]
+allow = ["filesystem=~/Downloads", "device=dri"]
+deny  = ["filesystem=home", "bus=org.freedesktop.Flatpak"]

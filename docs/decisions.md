@@ -286,6 +286,49 @@ tool that silently picks a mechanism cannot be audited: the same command would
 mean different things for two applications, with nothing on screen to say
 which. The verbosity is the feature.
 
+## The sandbox is built by adding to nothing
+
+The base binds `/usr` and `/etc` read only, gives a private `/proc`, a minimal
+`/dev`, a tmpfs over `/tmp` and a tmpfs over the home directory, empties the
+environment, and unshares every namespace. A profile then adds network, devices,
+desktop sockets and paths. Nothing is ever removed from a fuller starting point.
+
+Starting from the host and subtracting was the alternative, and it fails the
+only test that matters: a permission nobody thought to subtract stays granted,
+and the mistake is invisible. Starting from nothing makes the same mistake
+visible immediately, as an application that does not work.
+
+`/etc` read only is the one concession, and it is what makes a process start at
+all: the loader configuration, fonts, locale, CA certificates. It holds no user
+data, and the files in it that are secrets are unreadable to the user the
+sandbox runs as, inside it or outside.
+
+The environment is emptied rather than filtered for the same reason: a filter
+lists what to drop, and the token that leaks is the one nobody listed.
+
+## The profile declares capabilities, not bwrap arguments
+
+`network = true`, `share = ["wayland"]`, `read-write = ["~/Downloads"]`, rather
+than the bwrap flags they become.
+
+Passing flags straight through would have kept shiro out of the business of
+knowing what bwrap options mean, but a profile is read by someone deciding what
+an application may reach, and `--ro-bind-try /run/user/1000/wayland-0 …` is not
+that sentence. The vocabulary is small and closed, and `shiro perms run <app>`
+prints both the summary and the resulting invocation, so the translation is
+checkable rather than trusted.
+
+## Declaring a profile does not apply it
+
+A `run` profile is read at launch by `shiro run`, and there is nothing to apply.
+A `flatpak` profile is applied only when something calls `shiro perms flatpak
+<app> apply`, which is a recipe's `post` doing its own work.
+
+The engine recording a declaration and something changing on the system are kept
+separate on purpose. It is the same boundary as rule 3 in `CLAUDE.md`: the write
+is data, and every mutation past it has a command behind it that a user can see,
+repeat and undo.
+
 ## Profiles layer like the catalog, and the user layer may loosen
 
 Same four layers, same precedence, same wholesale replacement rather than

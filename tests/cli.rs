@@ -225,14 +225,3 @@ fn naming_an_item_runs_its_recipe_and_the_gate_comes_first() {
         stderr(&out)
     );
 }
-
-#[test]
-fn the_permissions_module_is_still_a_stub() {
-    for args in [
-        vec!["perms", "flatpak", "com.brave.Browser"],
-        vec!["run", "brave"],
-    ] {
-        let out = shiro("valid", &args);
-        assert_eq!(out.status.code(), Some(70), "{args:?}");
-    }
-}

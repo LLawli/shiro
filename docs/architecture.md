@@ -430,6 +430,26 @@ permission tool that guesses which mechanism it is talking to cannot be
 audited, and being auditable is most of the value here. The verbosity is the
 feature.
 
+| Command | Effect |
+| --- | --- |
+| `shiro perms flatpak <app>` | Print the current overrides (`show` is the default). |
+| `shiro perms flatpak <app> allow <perm>…` | Grant. |
+| `shiro perms flatpak <app> deny <perm>…` | Revoke. |
+| `shiro perms flatpak <app> reset` | Drop every override. |
+| `shiro perms flatpak <app> apply` | Apply what the registered profile declares. |
+| `shiro perms run <app>` | Print the profile in effect and the exact bwrap invocation `shiro run` would use. |
+
+`--system` acts on the system-wide override instead of the user's. Permissions
+are written in flatpak's own vocabulary, and the list is closed: `network`,
+`ipc`, `filesystem=<path>`, `device=<name>`, `bus=<name>`. A word outside it is
+refused with the list rather than forwarded, because a tool that passes through
+strings it does not understand cannot be audited either. Every invocation prints
+the `flatpak` command it is about to run.
+
+`shiro perms run <app>` is the audit surface for the bwrap side, which has no
+`--show` of its own: it prints what the profile grants and the invocation that
+grants it, so the two can be read against each other.
+
 ### `shiro run <app> [args…]`
 
 For native applications, which have no permission mechanism of their own. It
@@ -441,6 +461,63 @@ nothing else: no network, no home, no devices, no session bus. The application
 will fail to do most of what it wants, and that is the intended outcome, so the
 failure has to be legible: falling back prints a warning to stderr naming the
 profile that was looked for and where a profile could be placed.
+
+The base every sandbox starts from, profile or not:
+
+- every namespace unshared, and the network only back if a profile says so;
+- `/usr` and `/etc` bound read only, plus the merged-usr symlinks, which is what
+  makes a process start at all: the loader, fonts, locale, CA certificates;
+- a private `/proc`, a minimal `/dev`, a tmpfs over `/tmp`;
+- **a tmpfs over the home directory**, so an application that writes there works
+  and writes nowhere the user can see;
+- an emptied environment, rebuilt with `PATH`, `HOME` and the terminal's locale,
+  so that tokens and paths from the launching shell do not leak in;
+- `--die-with-parent` and `--new-session`: nothing outlives the launcher, and
+  nothing can push characters back into the terminal that started it.
+
+A program installed outside `/usr` is not in the sandbox at all, so shiro warns
+about that specifically rather than leaving bwrap to report a missing file.
+
+### The profile format
+
+```toml
+# ~/.local/share/shiro/profiles/brave.toml
+backend = "run"
+app     = "brave"
+
+[run]
+command    = "/usr/bin/brave-browser"   # without it, the name is resolved on PATH
+network    = true
+share      = ["wayland", "pipewire"]    # wayland | x11 | pipewire | pulse | session-bus
+devices    = ["dri"]                    # short name or absolute path
+read-only  = ["/etc/fonts"]
+read-write = ["~/Downloads"]
+
+[run.env]
+MOZ_ENABLE_WAYLAND = "1"
+```
+
+A `flatpak` profile carries the overrides instead, in the same vocabulary the
+command takes:
+
+```toml
+backend = "flatpak"
+app     = "com.brave.Browser"
+
+[flatpak]
+allow = ["filesystem=~/Downloads", "device=dri"]
+deny  = ["filesystem=home"]
+```
+
+`~` is the user's home and nothing else is expanded: a profile is read by
+someone deciding what an application may reach, so a path in it should mean what
+it looks like. **The file name and the `app` key must agree**, and a profile
+where they disagree is refused rather than guessed about, since guessing wrong
+means confining the wrong program.
+
+Declaring a profile does not apply it. `shiro run` reads a `run` profile at
+launch; a `flatpak` profile is applied when something calls `shiro perms flatpak
+<app> apply`, which is a recipe's `post` doing its own work.
 
 Failing open (running unconfined when a profile is missing) was never
 considered. A sandbox that silently disappears is worse than no sandbox,
@@ -493,10 +570,18 @@ item writes to `/etc/shiro/profiles/` and a `user` item to
 `$XDG_DATA_HOME/shiro/profiles/`. Never `/usr/share`, which belongs to the
 image and is read-only on bootc.
 
+**When it happens:** after `install` and before `post`, so that a `post`
+generating whatever calls `shiro run` finds the profile already there. It is
+reported as a phase named `permissions`, because a front end showing progress
+should not have a silent step in the middle of it.
+
 **Rollback:** the registry write is the one mutation the engine performs on its
-own initiative, so the engine owns undoing it. It is reverted with the rest of
-the transaction under the item's rollback policy, without the recipe declaring
-anything.
+own initiative, so the engine owns undoing it. It takes its place in the
+sequence like a completed phase, and is reverted with the rest of the
+transaction under the item's rollback policy, without the recipe declaring
+anything. Reverting means putting back exactly what was there, which for a
+profile that did not exist means removing the file rather than leaving an empty
+one.
 
 ### Open: one binary or two
 

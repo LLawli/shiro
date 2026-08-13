@@ -17,6 +17,7 @@ use crate::catalog::model::{Hook, ItemDecl, Privilege, Rollback};
 use crate::cli::Options;
 use crate::error::Error;
 use crate::exec::check::Status;
+use crate::perms::registry;
 use crate::render::progress::{Outcome, Progress};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +26,9 @@ pub enum Phase {
     Install,
     Post,
     Uninstall,
+    /// Recording an `[item.permissions]` declaration into the profile registry.
+    /// Not a hook: it is the engine's own write, and the engine undoes it.
+    Permissions,
     RollPre,
     RollInstall,
     RollPost,
@@ -37,6 +41,7 @@ impl Phase {
             Phase::Install => "install",
             Phase::Post => "post",
             Phase::Uninstall => "uninstall",
+            Phase::Permissions => "permissions",
             Phase::RollPre => "roll-pre",
             Phase::RollInstall => "roll-install",
             Phase::RollPost => "roll-post",
@@ -50,18 +55,6 @@ pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
         .as_ref()
         .expect("only an item reaches the executor");
     let progress = Progress::new(opts.json, node);
-
-    // The engine is supposed to record this into the profile registry, and the
-    // registry is not written yet. Saying so is the only honest option: a
-    // recipe whose profile silently did not land is a sandbox the user believes
-    // is there.
-    if item.permissions.is_some() {
-        eprintln!(
-            "shiro: `{}` declares [item.permissions], and recording profiles is not implemented \
-             yet; nothing was written",
-            node.path
-        );
-    }
 
     // Decided once, before anything runs. A password prompt in the middle of a
     // transaction arrives when the user has looked away, and a prompt that
@@ -132,36 +125,86 @@ fn install(
     elevated: bool,
     progress: &Progress<'_>,
 ) -> Result<(), Error> {
-    let phases = [
-        (Phase::Pre, &item.hooks.pre),
-        (Phase::Install, &item.hooks.install),
-        (Phase::Post, &item.hooks.post),
-    ];
+    let policy = if opts.keep_partial {
+        Rollback::Phase
+    } else {
+        item.rollback
+    };
 
     let mut completed: Vec<Phase> = Vec::new();
+    let mut recorded: Option<registry::Record> = None;
 
-    for (phase, declared) in phases {
-        let Some(declared) = declared else {
-            continue;
-        };
+    let steps = [
+        Step::Hook(Phase::Pre, &item.hooks.pre),
+        Step::Hook(Phase::Install, &item.hooks.install),
+        Step::Permissions,
+        Step::Hook(Phase::Post, &item.hooks.post),
+    ];
 
-        match run_phase(node, declared, phase, elevated, progress)? {
-            0 => completed.push(phase),
-            code => {
-                let policy = if opts.keep_partial {
-                    Rollback::Phase
-                } else {
-                    item.rollback
+    for step in steps {
+        match step {
+            Step::Hook(phase, declared) => {
+                let Some(declared) = declared else {
+                    continue;
                 };
-                return undo(
-                    node, item, &completed, phase, code, policy, elevated, progress,
-                );
+
+                match run_phase(node, declared, phase, elevated, progress)? {
+                    0 => completed.push(phase),
+                    code => {
+                        return undo(
+                            node, item, &completed, recorded, phase, code, policy, elevated,
+                            progress,
+                        );
+                    }
+                }
+            }
+            // The engine's own mutation, and the only call the executor makes
+            // into the permissions module. It is a data write: no bwrap, no
+            // flatpak, no wrapper, no desktop entry. It happens after `install`
+            // so that a `post` generating whatever calls `shiro run` finds the
+            // profile already there.
+            Step::Permissions => {
+                let Some(decl) = &item.permissions else {
+                    continue;
+                };
+
+                progress.phase_start(Phase::Permissions);
+                match registry::record(decl, item.privilege) {
+                    Ok(record) => {
+                        recorded = Some(record);
+                        // Recorded like any other completed step, so that an
+                        // undo puts it back in the right place in the sequence
+                        // rather than in a special case ahead of everything.
+                        completed.push(Phase::Permissions);
+                        progress.phase_end(Phase::Permissions, 0);
+                    }
+                    Err(err) => {
+                        progress.phase_end(Phase::Permissions, 1);
+                        eprintln!("shiro: {err}");
+                        return undo(
+                            node,
+                            item,
+                            &completed,
+                            None,
+                            Phase::Permissions,
+                            1,
+                            policy,
+                            elevated,
+                            progress,
+                        );
+                    }
+                }
             }
         }
     }
 
     progress.result(Outcome::Installed, 0);
     Ok(())
+}
+
+enum Step<'a> {
+    Hook(Phase, &'a Option<Hook>),
+    Permissions,
 }
 
 fn remove(
@@ -202,6 +245,7 @@ fn undo(
     node: &Node,
     item: &ItemDecl,
     completed: &[Phase],
+    recorded: Option<registry::Record>,
     failed: Phase,
     code: i32,
     policy: Rollback,
@@ -215,6 +259,21 @@ fn undo(
     );
 
     for phase in rollback::plan(policy, completed, failed) {
+        // The registry write was the engine's own, so the engine owns undoing
+        // it, with nothing declared by the recipe.
+        if phase == Phase::Permissions {
+            let Some(record) = &recorded else {
+                continue;
+            };
+            progress.phase_start(Phase::Permissions);
+            if let Err(err) = registry::restore(record) {
+                progress.result(Outcome::RollbackFailed, 4);
+                return Err(err);
+            }
+            progress.phase_end(Phase::Permissions, 0);
+            continue;
+        }
+
         let Some((undo_phase, declared)) = rollback::undo(&item.hooks, phase) else {
             continue;
         };

@@ -10,19 +10,34 @@ use std::{env, fs};
 
 fn main() {
     println!("cargo:rerun-if-changed=catalog");
+    println!("cargo:rerun-if-changed=profiles");
 
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is set by cargo"));
-    let root =
-        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets the manifest dir"))
-            .join("catalog");
+    let manifest =
+        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets the manifest dir"));
 
+    embed(
+        &manifest.join("catalog"),
+        &out.join("builtin_catalog.rs"),
+        "BUILTIN_CATALOG",
+        "catalog layer",
+    );
+    embed(
+        &manifest.join("profiles"),
+        &out.join("builtin_profiles.rs"),
+        "BUILTIN_PROFILES",
+        "permission profiles",
+    );
+}
+
+fn embed(root: &Path, out: &Path, name: &str, what: &str) {
     let mut files = Vec::new();
-    collect(&root, &root, &mut files);
+    collect(root, root, &mut files);
     files.sort();
 
-    let mut generated = String::from(
-        "/// The built-in catalog layer: (display name, contents), sorted.\n\
-         static BUILTIN_CATALOG: &[(&str, &str)] = &[\n",
+    let mut generated = format!(
+        "/// The built-in {what}: (display name, contents), sorted.\n\
+         static {name}: &[(&str, &str)] = &[\n"
     );
     for (name, path) in &files {
         generated.push_str(&format!(
@@ -33,7 +48,7 @@ fn main() {
     }
     generated.push_str("];\n");
 
-    fs::write(out.join("builtin_catalog.rs"), generated).expect("the generated file is writable");
+    fs::write(out, generated).expect("the generated file is writable");
 }
 
 fn collect(root: &Path, dir: &Path, found: &mut Vec<(String, PathBuf)>) {

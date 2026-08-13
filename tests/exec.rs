@@ -23,7 +23,7 @@ fn shiro(state: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shiro"))
         .args(args)
         .env("SHIRO_ROOT", &root)
-        .env("XDG_DATA_HOME", root.join("xdg"))
+        .env("XDG_DATA_HOME", state.join("xdg"))
         .env("SHIRO_CHECK_TIMEOUT", "5")
         .env("STATE", state)
         .output()
@@ -290,4 +290,40 @@ fn execution_flags_are_refused_on_a_menu() {
 
     assert_eq!(out.status.code(), Some(2));
     assert!(stderr(&out).contains("act on an item"), "{}", stderr(&out));
+}
+
+#[test]
+fn the_engine_records_a_declared_profile_between_install_and_post() {
+    let state = state("confined");
+    let out = shiro(&state, &["demo", "confined", "--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    // The profile is on disk before `post` runs, which is what lets a post
+    // generate whatever calls `shiro run` without ordering games.
+    assert_eq!(log(&state), ["post"]);
+
+    let profile = state.join("xdg/shiro/profiles/demo-app.toml");
+    let written = fs::read_to_string(&profile).expect("the profile was written");
+    assert!(written.contains("backend = \"run\""), "{written}");
+    assert!(written.contains("network = true"), "{written}");
+
+    // It is a phase like any other in the report, because a front end showing
+    // progress should not have a silent step in the middle.
+    let phases: Vec<String> = events(&out)
+        .iter()
+        .filter_map(|event| event["phase"].as_str().map(str::to_owned))
+        .collect();
+    assert!(phases.contains(&"permissions".to_owned()), "{phases:?}");
+}
+
+#[test]
+fn a_recorded_profile_is_taken_back_out_when_the_transaction_is_undone() {
+    let state = state("confined-fails");
+    let out = shiro(&state, &["demo", "confined-fails"]);
+    assert_eq!(out.status.code(), Some(1));
+
+    // The engine wrote it on its own initiative, so the engine takes it back
+    // out, with nothing declared by the recipe.
+    assert!(!state.join("xdg/shiro/profiles/demo-ghost.toml").exists());
+    assert_eq!(log(&state), ["roll-install"]);
 }

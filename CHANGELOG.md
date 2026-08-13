@@ -1,0 +1,47 @@
+# Changelog
+
+What changed, and what a consumer has to do about it. The `--json` payload
+carries a `schema` field, and any change a consumer could notice is recorded
+here with the version that made it.
+
+## Unreleased
+
+Nothing is released yet: this is the first working shape of the engine.
+
+### The catalog is the command surface
+
+- Four layers load and merge per node path: built-in (embedded), image
+  (`/usr/share/shiro/catalog`), machine (`/etc/shiro/catalog`), user
+  (`$XDG_DATA_HOME/shiro/catalog`). `SHIRO_ROOT` reroots the two system layers.
+- An argument path resolves against the merged tree. A menu lists its children,
+  an item runs its recipe.
+- `check` runs in parallel for a menu's children, bounded by a three second
+  timeout (`SHIRO_CHECK_TIMEOUT`), never elevated.
+- `shiro doctor`, `shiro version`, `shiro catalog validate`, `shiro catalog
+  sources`.
+
+### Recipes run, and are undone when they fail
+
+- `check` gates, then `pre`, `install`, `post`, with the item's rollback policy
+  deciding what a failure undoes.
+- `--force`, `--dry-run`, `--keep-partial`, `--uninstall`.
+- Elevation is `sudo` (`SHIRO_SUDO` replaces it), prompting once before anything
+  runs.
+- Exit codes: 0 fine, 1 a hook or the catalog failed, 2 the invocation was
+  wrong, 3 shiro declined and nothing happened, 4 a rollback hook failed.
+
+### Permissions
+
+- `shiro run <app>` launches a native application under bwrap, from a declared
+  profile or from a fallback that grants close to nothing and says so.
+- `shiro perms run <app>` prints the profile and the exact invocation;
+  `shiro perms flatpak <app> [show|allow|deny|reset|apply]` drives
+  `flatpak override`.
+- An item's `[item.permissions]` is recorded into the profile registry between
+  `install` and `post`, and taken back out if the transaction is undone.
+
+### Structured output
+
+`schema` is 1. Payload kinds: `menu`, `doctor`, `version`, `validation`,
+`sources`, `profile`, and the `phase` and `result` objects a running recipe
+emits, one per line.

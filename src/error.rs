@@ -19,9 +19,6 @@ pub enum Error {
     /// A rollback hook failed, which is a different kind of bad: the system is
     /// in a state neither the user nor the recipe author intended.
     RollbackFailed(String),
-    /// A scaffolded entry point that parses its way here and stops. Every
-    /// occurrence disappears as the module behind it is written.
-    NotImplemented(&'static str),
 }
 
 impl Error {
@@ -31,7 +28,6 @@ impl Error {
             Error::Usage(_) => 2,
             Error::Refused(_) => 3,
             Error::RollbackFailed(_) => 4,
-            Error::NotImplemented(_) => 70,
         }
     }
 }
@@ -44,7 +40,6 @@ impl fmt::Display for Error {
             | Error::Refused(message)
             | Error::Failed(message)
             | Error::RollbackFailed(message) => f.write_str(message),
-            Error::NotImplemented(what) => write!(f, "{what} is not implemented yet"),
         }
     }
 }
