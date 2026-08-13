@@ -177,6 +177,39 @@ Rejected "re-run only `post`" as a default: a third behavior for the user to
 remember, and a silent one, since the difference between "reinstalled" and
 "reconfigured" would not be visible in the outcome.
 
+## Removal is a flag on the item's path, not a verb
+
+`shiro install code vs-code --uninstall`, not `shiro uninstall install code
+vs-code`.
+
+The path is the item's address, and the verbs in it belong to the catalog. A
+native `uninstall` command would sit in front of a path that starts with
+`install`, reserve another name the catalog cannot use, and read worse for every
+root node that is not called `install`. The flag reads oddly next to `install`
+and that is the whole of its cost, paid once per invocation by someone who
+already knows what they are removing.
+
+Rejected a toggle for the reason already recorded below: shiro never decides
+between installing and removing from a status it just read.
+
+## Elevation is sudo, and the prompt happens once, before anything runs
+
+`sudo true` runs before the first hook, and the credential cache it fills covers
+the rest of the transaction. `SHIRO_SUDO` replaces the tool for a machine that
+prefers `run0`, `doas` or `pkexec`.
+
+sudo is the default because of that cache, which is the mechanism that makes
+"prompt once, up front" true rather than aspirational. `run0` is the more modern
+answer on Fedora bootc and has no equivalent, so a two-phase recipe under it can
+authenticate twice, which is exactly what deciding privilege per item was meant
+to avoid. That is a property of the tool, and the variable is there for someone
+who wants it anyway.
+
+An elevated hook receives its environment as `export` statements inside the
+script rather than as `VAR=value` in front of the command, because a default
+sudoers refuses the latter. `--dry-run` prints the same form, so what a user
+reads before authorising is what runs.
+
 ## Privilege is declared per item, not per hook
 
 Per-hook privilege is more precise and was rejected. It puts an authentication

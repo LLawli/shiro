@@ -113,6 +113,15 @@ fn timeout() -> Duration {
         .unwrap_or(DEFAULT_TIMEOUT)
 }
 
+/// One item's `check`, for the gate in front of a recipe. Same rules as the
+/// batch: bounded, never elevated, no side effects it is allowed to have.
+pub fn single(node: &Node) -> Status {
+    match node.item.as_ref().map(|item| &item.hooks.check) {
+        Some(Some(_)) => run(node, timeout()),
+        _ => Status::Unknown,
+    }
+}
+
 fn run(node: &Node, timeout: Duration) -> Status {
     let Some(hook) = node
         .item

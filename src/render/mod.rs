@@ -5,6 +5,7 @@
 //! breaking change to it is a breaking change to shiro.
 
 pub mod json;
+pub mod progress;
 pub mod text;
 
 use crate::catalog::Node;

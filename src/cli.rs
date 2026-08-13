@@ -33,6 +33,18 @@ pub enum Invocation {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Options {
     pub json: bool,
+    /// Skip the `check` gate, and nothing else.
+    pub force: bool,
+    /// Print what each hook would run, resolved, and run none of it.
+    pub dry_run: bool,
+    /// Downgrade `atomic` to `phase` for this invocation.
+    pub keep_partial: bool,
+    /// Remove the item instead of installing it.
+    ///
+    /// A flag rather than a verb, because the path is the item's address and
+    /// the verbs belong to the catalog: `shiro uninstall install code vs-code`
+    /// reads worse than the contradiction it avoids.
+    pub uninstall: bool,
 }
 
 pub fn parse(args: &[String]) -> Result<Invocation, Error> {
@@ -43,24 +55,34 @@ pub fn parse(args: &[String]) -> Result<Invocation, Error> {
     match head.as_str() {
         "perms" => Ok(Invocation::Perms(rest.to_vec())),
         "run" => Ok(Invocation::Run(rest.to_vec())),
-        "doctor" => flagged(rest).map(|(rest, opts)| Invocation::Doctor(rest, opts)),
-        "catalog" => flagged(rest).map(|(rest, opts)| Invocation::Catalog(rest, opts)),
-        "version" => flagged(rest).map(|(rest, opts)| Invocation::Version(rest, opts)),
-        _ => flagged(args).map(|(rest, opts)| Invocation::Path(rest, opts)),
+        "doctor" => reporting(rest).map(|(rest, opts)| Invocation::Doctor(rest, opts)),
+        "catalog" => reporting(rest).map(|(rest, opts)| Invocation::Catalog(rest, opts)),
+        "version" => reporting(rest).map(|(rest, opts)| Invocation::Version(rest, opts)),
+        _ => flagged(args, true).map(|(rest, opts)| Invocation::Path(rest, opts)),
     }
+}
+
+/// A native command that only reports takes `--json` and nothing else: there is
+/// no transaction for `--force` or `--dry-run` to mean anything about.
+fn reporting(args: &[String]) -> Result<(Vec<String>, Options), Error> {
+    flagged(args, false)
 }
 
 /// Pull the flags shiro understands out of the arguments, wherever they sit, and
 /// leave the rest in order. An unknown flag is refused rather than passed on as
 /// a path segment: `shiro install code --jsno` should not report that `--jsno`
 /// is not a command.
-fn flagged(args: &[String]) -> Result<(Vec<String>, Options), Error> {
+fn flagged(args: &[String], executing: bool) -> Result<(Vec<String>, Options), Error> {
     let mut opts = Options::default();
     let mut rest = Vec::new();
 
     for arg in args {
         match arg.as_str() {
             "--json" => opts.json = true,
+            "--force" if executing => opts.force = true,
+            "--dry-run" if executing => opts.dry_run = true,
+            "--keep-partial" if executing => opts.keep_partial = true,
+            "--uninstall" if executing => opts.uninstall = true,
             flag if flag.starts_with('-') => {
                 return Err(Error::Usage(format!("unknown flag `{flag}`")));
             }

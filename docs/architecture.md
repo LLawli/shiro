@@ -216,6 +216,40 @@ hand and idempotence cannot be proven by a validator, so re-running one by
 accident is a real way to break a working system. `--force` skips the gate and
 nothing else.
 
+### Removing
+
+`--uninstall` on the item's path removes it: `shiro install code vs-code
+--uninstall`. It is a flag rather than a verb because the path is the item's
+address and the verbs belong to the catalog, so a native `uninstall` command
+would read `shiro uninstall install code vs-code`.
+
+The gate runs in the other direction: if `check` reports absent, the removal is
+refused and `--force` overrides it. A removal has no rollback of its own. It
+stops at the first hook that fails and reports what is left, because "undo the
+undo" is not a state any recipe describes.
+
+### Flags
+
+| Flag | Effect |
+| --- | --- |
+| `--json` | Structured output, section 6. The only flag the reporting commands take. |
+| `--force` | Skip the `check` gate, and nothing else. |
+| `--dry-run` | Print the exact command each hook would run, resolved, and run none of them. |
+| `--keep-partial` | Downgrade `atomic` to `phase` for this invocation. |
+| `--uninstall` | Remove instead of install. |
+
+### Exit codes
+
+A front end acts on these, so they are contract:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | It worked. |
+| 1 | A hook failed, or the catalog could not be loaded. Whatever the rollback policy asked for was done. |
+| 2 | The invocation was wrong: unknown flag, a path that stops matching, arguments after an item. |
+| 3 | shiro declined and nothing happened: already installed, or not installed and asked to remove. |
+| 4 | A rollback hook failed. The system is in a state neither the user nor the recipe intended. |
+
 ### Rollback
 
 The item declares its policy in `rollback`:
@@ -246,6 +280,17 @@ Declared per item, never per hook. `privilege = "user"` runs everything
 unelevated; `privilege = "system"` elevates the whole recipe. The engine
 determines the requirement before running anything and prompts once, up front.
 
+Elevation is `sudo`, and `SHIRO_SUDO` replaces it (`run0`, `doas`, `pkexec`, or
+`sudo` with arguments). The single prompt is a `sudo true` before any hook runs,
+which fills the credential cache that then covers the transaction. A tool
+without such a cache will prompt again per hook, which is a property of that
+tool rather than of shiro.
+
+An elevated hook carries its environment inside the script, as `export`
+statements ahead of the body, because sudo resets the environment and a default
+sudoers refuses `VAR=value` in front of a command. `--dry-run` prints that form,
+so what is read is what would run.
+
 Per-hook privilege was the more precise design and was rejected: it produces a
 password prompt in the middle of a transaction, which is exactly when the user
 has walked away, and a timed-out prompt turns into a rollback of work that had
@@ -262,11 +307,15 @@ where it is:
 | `SHIRO_PHASE` | The hook currently running. |
 | `SHIRO_RECIPE_DIR` | Directory of the TOML file that declared the item, for locating sibling scripts and assets. |
 | `SHIRO_LAYER` | Which layer the item came from. |
-| `SHIRO_DRY_RUN` | `1` when running under `--dry-run`. |
+| `SHIRO_DRY_RUN` | `1` in the environment `--dry-run` prints, `0` when the hook runs. |
+
+`SHIRO_RECIPE_DIR` is absent, rather than empty, for an item from the built-in
+layer, which has no directory on disk: `cd "$SHIRO_RECIPE_DIR"` should fail
+rather than land in the current directory.
 
 `--dry-run` prints the exact command each hook would run, resolved, without
 executing it. A tool whose job is to run arbitrary scripts as root owes the
-user a way to read them first.
+user a way to read them first. Nothing runs under it, not even `check`.
 
 ## 6. Structured output
 
@@ -318,6 +367,22 @@ something the user meant to install.
 Running a recipe emits one object per phase transition, so a front end can show
 progress on a long install rather than a spinner. The final object carries the
 outcome and the exit code.
+
+```json
+{"schema":1,"kind":"phase","item":"install.code.vs-code","phase":"install","state":"start"}
+{"schema":1,"kind":"phase","item":"install.code.vs-code","phase":"install","state":"ok","exit":0}
+{"schema":1,"kind":"result","item":"install.code.vs-code","outcome":"installed","exit":0}
+```
+
+`state` is `start`, `ok`, `failed` or `dry-run`. `outcome` is `installed`,
+`removed`, `rolled-back` (the transaction failed and everything was undone),
+`partial` (it failed and only the failed phase was undone), `failed`,
+`rollback-failed` or `dry-run`.
+
+**A hook's own output goes to stderr under `--json`**, so a long install still
+shows its progress while stdout stays a clean stream of objects. Capturing it
+instead would hold it back until the phase ended, which is the opposite of what
+the per-phase reporting is for.
 
 ## 7. State
 

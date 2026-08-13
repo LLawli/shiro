@@ -8,7 +8,7 @@
 use crate::catalog::{Kind, load, resolve};
 use crate::cli::Options;
 use crate::error::Error;
-use crate::exec::check;
+use crate::exec::{self, check};
 use crate::render::{Child, Listing, json, text};
 
 pub fn path(segments: &[String], opts: &Options) -> Result<(), Error> {
@@ -18,7 +18,13 @@ pub fn path(segments: &[String], opts: &Options) -> Result<(), Error> {
     if let Some(node) = node
         && node.kind == Kind::Item
     {
-        return Err(Error::NotImplemented("running a recipe"));
+        return exec::item(node, opts);
+    }
+
+    if opts.force || opts.dry_run || opts.keep_partial || opts.uninstall {
+        return Err(Error::Usage(
+            "those flags act on an item, and this path names a menu".to_owned(),
+        ));
     }
 
     let children = catalog.children(node.map(|node| node.path.as_str()).unwrap_or(""));

@@ -1,0 +1,95 @@
+# Recipes that exercise the executor without touching the machine: every hook
+# writes to $STATE, which the test points at a fresh directory.
+
+[[menu]]
+path  = "demo"
+title = "Executor demo"
+
+[[item]]
+path  = "demo.clean"
+title = "Installs cleanly"
+
+[item.hooks]
+check        = 'test -f "$STATE/installed"'
+pre          = 'echo "pre $SHIRO_PHASE $SHIRO_ITEM $SHIRO_LAYER $SHIRO_DRY_RUN" >> "$STATE/log"'
+install      = 'echo install >> "$STATE/log"; touch "$STATE/installed"'
+post         = 'echo post >> "$STATE/log"'
+roll-pre     = 'echo roll-pre >> "$STATE/log"'
+roll-install = 'echo roll-install >> "$STATE/log"; rm -f "$STATE/installed"'
+roll-post    = 'echo roll-post >> "$STATE/log"'
+
+# Fails in install, under the default atomic policy: the failed phase is undone
+# first, then everything that had completed, in reverse.
+[[item]]
+path  = "demo.atomic"
+title = "Fails, and is undone entirely"
+
+[item.hooks]
+pre          = 'echo pre >> "$STATE/log"'
+install      = 'echo install >> "$STATE/log"; exit 7'
+roll-pre     = 'echo roll-pre >> "$STATE/log"'
+roll-install = 'echo roll-install >> "$STATE/log"'
+
+[[item]]
+path     = "demo.phase"
+title    = "Fails, and only the failed phase is undone"
+rollback = "phase"
+
+[item.hooks]
+pre          = 'echo pre >> "$STATE/log"'
+install      = 'echo install >> "$STATE/log"; exit 3'
+roll-pre     = 'echo roll-pre >> "$STATE/log"'
+roll-install = 'echo roll-install >> "$STATE/log"'
+
+[[item]]
+path     = "demo.none"
+title    = "Fails, and nothing is undone"
+rollback = "none"
+
+[item.hooks]
+install = 'echo install >> "$STATE/log"; exit 1'
+
+[[item]]
+path  = "demo.broken-rollback"
+title = "Fails, and the rollback fails too"
+
+[item.hooks]
+install      = 'echo install >> "$STATE/log"; exit 1'
+roll-install = 'echo roll-install >> "$STATE/log"; exit 9'
+
+[[item]]
+path  = "demo.removable"
+title = "Removes with its own uninstall"
+
+[item.hooks]
+check        = 'test -f "$STATE/installed"'
+install      = 'touch "$STATE/installed"'
+roll-install = 'echo roll-install >> "$STATE/log"; rm -f "$STATE/installed"'
+uninstall    = 'echo uninstall >> "$STATE/log"; rm -f "$STATE/installed"'
+
+[[item]]
+path  = "demo.derived"
+title = "Removes with the rollback hooks"
+
+[item.hooks]
+install      = 'touch "$STATE/installed"'
+roll-pre     = 'echo roll-pre >> "$STATE/log"'
+roll-install = 'echo roll-install >> "$STATE/log"'
+roll-post    = 'echo roll-post >> "$STATE/log"'
+
+[[item]]
+path     = "demo.nothing-to-remove"
+title    = "Declares no way back"
+rollback = "none"
+
+[item.hooks]
+install = 'true'
+
+[[item]]
+path      = "demo.system"
+title     = "Needs root"
+privilege = "system"
+
+[item.hooks]
+install      = 'echo system >> "$STATE/log"'
+roll-install = 'true'

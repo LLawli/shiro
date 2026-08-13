@@ -214,10 +214,16 @@ fn doctor_reports_each_layer_and_the_labels_it_found() {
 }
 
 #[test]
-fn running_a_recipe_is_not_implemented_yet() {
+fn naming_an_item_runs_its_recipe_and_the_gate_comes_first() {
+    // This item's check answers `installed`, so the recipe is refused rather
+    // than re-run. The executor's own behavior is covered in tests/exec.rs.
     let out = shiro("valid", &["install", "code", "vs-code"]);
-    assert_eq!(out.status.code(), Some(70));
-    assert!(stderr(&out).contains("running a recipe"));
+    assert_eq!(out.status.code(), Some(3));
+    assert!(
+        stderr(&out).contains("already installed"),
+        "{}",
+        stderr(&out)
+    );
 }
 
 #[test]
