@@ -4,6 +4,17 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
+## Unreleased
+
+### Fixed
+
+- `shiro perms flatpak <app> apply` issued one `flatpak override` invocation per
+  side, and a deny that resets (`filesystem=host:reset`) discarded the allows the
+  first invocation had just written. It now emits a single invocation carrying
+  both. No payload or command surface changed, so `schema` stays 1. ([#1])
+
+[#1]: https://github.com/LLawli/shiro/issues/1
+
 ## 0.1.0 (2026-08-13)
 
 The first release: the engine is complete against `docs/architecture.md`, and

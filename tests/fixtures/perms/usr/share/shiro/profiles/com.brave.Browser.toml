@@ -3,6 +3,8 @@
 backend = "flatpak"
 app     = "com.brave.Browser"
 
+# A resetting deny next to an allow: the shape that broke when `apply` issued
+# one invocation per side.
 [flatpak]
-allow = ["filesystem=~/Downloads", "device=dri"]
-deny  = ["filesystem=home", "bus=org.freedesktop.Flatpak"]
+allow = ["filesystem=xdg-download", "device=dri"]
+deny  = ["filesystem=host:reset", "filesystem=home", "bus=org.freedesktop.Flatpak"]

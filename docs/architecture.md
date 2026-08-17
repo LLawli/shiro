@@ -448,6 +448,12 @@ refused with the list rather than forwarded, because a tool that passes through
 strings it does not understand cannot be audited either. Every invocation prints
 the `flatpak` command it is about to run.
 
+**`apply` emits one invocation carrying both sides**, never one per side.
+`flatpak override` merges into a file it keeps, and a deny that resets
+(`filesystem=host:reset`) drops what is already in that file, so a second
+invocation discards what the first one wrote. Within one invocation flatpak
+resolves the whole set, in either order.
+
 `shiro perms run <app>` is the audit surface for the bwrap side, which has no
 `--show` of its own: it prints what the profile grants and the invocation that
 grants it, so the two can be read against each other.

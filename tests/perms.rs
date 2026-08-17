@@ -4,6 +4,8 @@
 //! the fallback when there is none, and that a missing profile is loud rather
 //! than permissive.
 
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -297,4 +299,54 @@ fn skip(why: &str) -> bool {
 
     eprintln!("skipped: {why}");
     false
+}
+
+#[test]
+fn apply_issues_a_single_override_invocation() {
+    // `flatpak override` merges into a file it keeps, so a deny that resets
+    // discards whatever an earlier invocation wrote. What broke was the number
+    // of invocations, so a fake flatpak that records them is the test.
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("fake-flatpak");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("the scratch directory is writable");
+
+    let log = dir.join("invocations");
+    let fake = dir.join("flatpak");
+    fs::write(
+        &fake,
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FLATPAK_LOG\"\n",
+    )
+    .expect("the fake is writable");
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("chmod");
+
+    let root = root();
+    let out = Command::new(env!("CARGO_BIN_EXE_shiro"))
+        .args(["perms", "flatpak", "com.brave.Browser", "apply"])
+        .env("PATH", format!("{}:/usr/bin:/bin", dir.display()))
+        .env("FLATPAK_LOG", &log)
+        .env("SHIRO_ROOT", &root)
+        .env("XDG_DATA_HOME", root.join("xdg"))
+        .output()
+        .expect("the binary runs");
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let recorded = fs::read_to_string(&log).expect("the fake flatpak ran");
+    let invocations: Vec<&str> = recorded.lines().collect();
+    assert_eq!(
+        invocations.len(),
+        1,
+        "one invocation carrying both sides, not one per side: {invocations:#?}"
+    );
+
+    let args = invocations[0];
+    assert!(args.contains("--nofilesystem=host:reset"), "{args}");
+    assert!(args.contains("--nofilesystem=home"), "{args}");
+    assert!(args.contains("--filesystem=xdg-download"), "{args}");
+    assert!(args.contains("--device=dri"), "{args}");
+    // Denies first, because that is how the profile reads. flatpak resolves the
+    // set either way, which is why the fix is one invocation and not a sort.
+    assert!(
+        args.find("--nofilesystem=host:reset") < args.find("--filesystem=xdg-download"),
+        "{args}"
+    );
 }

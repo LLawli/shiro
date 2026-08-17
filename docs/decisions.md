@@ -340,6 +340,33 @@ that sentence. The vocabulary is small and closed, and `shiro perms run <app>`
 prints both the summary and the resulting invocation, so the translation is
 checkable rather than trusted.
 
+## `perms flatpak apply` emits one invocation, and knows nothing about `:reset`
+
+Applying a profile builds a single `flatpak override` command carrying the
+denies and the allows together. It used to issue one per side, and that silently
+dropped the allows for any profile whose denies included a resetting one:
+`flatpak override` merges into a file it keeps, `filesystem=host:reset` clears
+what is in that file, and the second invocation therefore threw away what the
+first had just written. Measured on a real install, the override file ended as
+`filesystems=!host:reset;!home;!host;` with the granted `xdg-download` gone.
+
+Two fixes were rejected on the way to this one.
+
+**Ordering the arguments** does not apply, because the ordering was never the
+variable: inside a single invocation flatpak resolves the whole set and produces
+the same result in either order. The split was the bug.
+
+**Special-casing `:reset` in shiro**, by hoisting it to the front or by issuing
+resets first, would work and is the wrong shape. `:reset` is flatpak vocabulary,
+and teaching the engine that one token means "must come first" is the erosion
+the boundary in `CLAUDE.md` warns about, one locally-reasonable exception at a
+time. One invocation needs no knowledge of what any token means and fixes the
+whole class rather than this token.
+
+The denies are emitted before the allows because that is how a profile reads,
+"take everything away, then give this back", and explicitly not because flatpak
+requires it.
+
 ## Declaring a profile does not apply it
 
 A `run` profile is read at launch by `shiro run`, and there is nothing to apply.

@@ -76,19 +76,38 @@ fn apply(app: &str, system: bool) -> Result<(), Error> {
         )));
     }
 
-    override_with(app, system, &declared.allow, true)?;
-    override_with(app, system, &declared.deny, false)
+    // One invocation carrying both sides, never one per side.
+    //
+    // `flatpak override` merges into a file it keeps, and a deny that resets
+    // (`filesystem=host:reset`) drops what is already in that file. Split across
+    // two invocations, the second one therefore discards what the first just
+    // wrote, and the allow is silently gone. Within one invocation flatpak
+    // resolves the whole set coherently, in either order.
+    //
+    // The denies are emitted first because that is how the profile reads, "take
+    // everything away, then give this back", and not because flatpak cares.
+    let mut flags = translate_all(&declared.deny, false)?;
+    flags.extend(translate_all(&declared.allow, true)?);
+
+    invoke(app, system, flags)
 }
 
 fn override_with(app: &str, system: bool, perms: &[String], allow: bool) -> Result<(), Error> {
-    if perms.is_empty() {
+    let flags = translate_all(perms, allow)?;
+    if flags.is_empty() {
         return Ok(());
     }
 
+    invoke(app, system, flags)
+}
+
+fn translate_all(perms: &[String], allow: bool) -> Result<Vec<String>, Error> {
+    perms.iter().map(|perm| translate(perm, allow)).collect()
+}
+
+fn invoke(app: &str, system: bool, flags: Vec<String>) -> Result<(), Error> {
     let mut args = vec!["override".to_owned(), scope(system).to_owned()];
-    for perm in perms {
-        args.push(translate(perm, allow)?);
-    }
+    args.extend(flags);
     args.push(app.to_owned());
 
     run(&args.iter().map(String::as_str).collect::<Vec<_>>())
