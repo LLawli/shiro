@@ -4,7 +4,7 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
-## Unreleased
+## 0.1.1 (2026-08-17)
 
 ### Fixed
 
