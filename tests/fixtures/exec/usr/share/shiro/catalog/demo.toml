@@ -125,3 +125,14 @@ post         = 'exit 1'
 [item.permissions]
 backend = "run"
 app     = "demo-ghost"
+
+# Carries a question. It needs `--yes` unless a terminal answers it live, and
+# there is no terminal behind a test.
+[[item]]
+path    = "demo.confirmed"
+title   = "Asks first"
+confirm = "Really?"
+
+[item.hooks]
+install      = 'echo confirmed >> "$STATE/log"'
+roll-install = 'true'

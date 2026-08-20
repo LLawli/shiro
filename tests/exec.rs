@@ -388,3 +388,41 @@ fn a_recorded_profile_is_taken_back_out_when_the_transaction_is_undone() {
     assert!(!state.join("xdg/shiro/profiles/demo-ghost.toml").exists());
     assert_eq!(log(&state), ["roll-install"]);
 }
+
+#[test]
+fn an_item_that_asks_a_question_needs_it_answered() {
+    let state = state("confirm");
+    let out = shiro(&state, &["demo", "confirmed"]);
+
+    // Nobody to ask, and nobody answered in advance: nothing ran.
+    assert_eq!(out.status.code(), Some(3));
+    assert!(stderr(&out).contains("Really?"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("--yes"), "{}", stderr(&out));
+    assert!(log(&state).is_empty(), "{:?}", log(&state));
+}
+
+#[test]
+fn json_is_not_a_way_around_a_question() {
+    let state = state("confirm-json");
+
+    // A front end reads the question out of the listing and draws its own
+    // dialog, so it answers with `--yes` like anyone else. Were `--json` an
+    // exemption, it would also be the shortest way to skip the question.
+    let out = shiro(&state, &["demo", "confirmed", "--json"]);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(log(&state).is_empty(), "{:?}", log(&state));
+
+    let out = shiro(&state, &["demo", "confirmed", "--json", "--yes"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(log(&state), ["confirmed"]);
+}
+
+#[test]
+fn force_skips_the_gate_and_not_the_question() {
+    let state = state("confirm-force");
+    let out = shiro(&state, &["demo", "confirmed", "--force"]);
+
+    // `--force` is documented as skipping the `check` gate and nothing else.
+    assert_eq!(out.status.code(), Some(3));
+    assert!(log(&state).is_empty(), "{:?}", log(&state));
+}

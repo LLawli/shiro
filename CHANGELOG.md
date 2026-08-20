@@ -16,6 +16,17 @@ already read: the break is in what is new, listed under each entry.
   `destructive`, `interactive` and `keep_open` on an item. They are emitted in a
   menu listing when set, and omitted otherwise, which for a boolean means it
   appears only when true. ([#2])
+- `--yes`, which answers an item's `confirm`. An item that declares one is
+  refused (exit 3) until the question is answered: at a terminal shiro asks,
+  and everywhere else, `--json` included, `--yes` is the answer. A front end
+  that draws its own dialog from the `confirm` text in the listing passes
+  `--yes` afterwards. ([#2])
+
+### Changed
+
+- An item declaring `confirm` no longer runs unattended without `--yes`. No
+  catalog declared the field before this release, so nothing that exists today
+  changes behaviour. ([#2])
 
 - `SHIRO_SUDO_PROBE=0` drops the `sudo true` that runs before the first hook of
   a `system` item. It is for an elevator that keeps no credential cache, where

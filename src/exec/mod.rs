@@ -10,6 +10,7 @@ pub mod env;
 pub mod hook;
 pub mod rollback;
 
+use std::io::{Write, stderr, stdin};
 use std::process::Command;
 
 use crate::catalog::Node;
@@ -66,6 +67,7 @@ pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
     }
 
     gate(node, opts)?;
+    confirm(node, item, opts)?;
     if elevated && hook::probes() {
         authenticate()?;
     }
@@ -96,6 +98,61 @@ fn gate(node: &Node, opts: &Options) -> Result<(), Error> {
         ))),
         _ => Ok(()),
     }
+}
+
+/// The item's `confirm`, answered before anything runs.
+///
+/// One rule, and no bypass that depends on the output mode: an item that
+/// declares a question needs `--yes`, unless there is a terminal that can be
+/// asked live. A front end reads the question out of the listing, draws its own
+/// dialog and passes `--yes`, which makes that flag the single signal that the
+/// question has been answered, by a human or on a human's behalf.
+///
+/// Refusing when there is nobody to ask is the whole point. Proceeding instead
+/// would make a piped terminal more dangerous than the menu, which is the
+/// inversion this exists to prevent.
+///
+/// `--force` deliberately does not answer it: it skips the `check` gate and
+/// nothing else. The two guard different things, the system's state and the
+/// user's intent.
+fn confirm(node: &Node, item: &ItemDecl, opts: &Options) -> Result<(), Error> {
+    let Some(question) = &item.confirm else {
+        return Ok(());
+    };
+    if opts.yes {
+        return Ok(());
+    }
+
+    // Under `--json` stdout is a stream of objects and the caller is a program,
+    // so there is no live asking even from a terminal.
+    if opts.json || !stdin_is_a_terminal() {
+        return Err(Error::Refused(format!(
+            "`{}` asks: {question}\n  there is no terminal to answer in; `--yes` answers it",
+            node.path
+        )));
+    }
+
+    eprint!("{question} [y/N] ");
+    let _ = stderr().flush();
+
+    let mut answer = String::new();
+    if stdin().read_line(&mut answer).is_err() {
+        answer.clear();
+    }
+
+    // Anything that is not a yes is a no. Nothing carrying a confirmation
+    // should run because a keystroke was ambiguous.
+    if matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        Ok(())
+    } else {
+        Err(Error::Refused(format!("`{}` was not confirmed", node.path)))
+    }
+}
+
+/// Whether there is somebody at the other end of stdin to answer a question.
+fn stdin_is_a_terminal() -> bool {
+    // SAFETY: isatty only inspects a descriptor and reports on it.
+    unsafe { libc::isatty(libc::STDIN_FILENO) == 1 }
 }
 
 /// One prompt, up front, before any hook runs, which is what the credential

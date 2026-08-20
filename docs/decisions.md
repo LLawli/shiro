@@ -214,6 +214,37 @@ already knows what they are removing.
 Rejected a toggle for the reason already recorded below: shiro never decides
 between installing and removing from a status it just read.
 
+## A confirmation is refused rather than assumed, and `--json` is not a bypass
+
+An item declaring `confirm` needs `--yes`, unless a terminal is there to answer
+it live. Nothing about the output mode changes that.
+
+The field exists so that "Really power off?" belongs to the item rather than to
+a list of paths hardcoded in a front end. Once it is data, the terminal has to
+honour it too, or the promise the whole design rests on breaks in the worst
+direction: everything the menu can do, the terminal can do with the same words,
+and the terminal would be the more dangerous of the two.
+
+**Rejected: proceeding when there is no terminal to ask.** It is the friendlier
+default and it is precisely the inversion above. A piped invocation would run
+what the menu asks about, silently, and the property would hold only for the
+case that was already safe.
+
+**Rejected: `--json` exempting the caller.** It reads correct, since a front end
+under `--json` has the question in the listing and draws its own dialog. It also
+makes `--json` the shortest way to skip a confirmation, which is a bypass
+sitting inside a flag that is otherwise about formatting. One flag means "the
+question has been answered", and a front end passes it after its dialog like
+anybody else.
+
+**Rejected: `--force` answering it.** `--force` skips the `check` gate and
+nothing else, which is already in the contract. The gate is about the state of
+the system and the question is about the intent of the user; treating one as
+evidence of the other is how a flag grows a second meaning nobody documented.
+
+The cost: a script that drives a confirming item has to say `--yes`. That is the
+intended cost, and it is discoverable, because the refusal names the flag.
+
 ## Elevation is sudo, and the prompt happens once, before anything runs
 
 `sudo true` runs before the first hook, and the credential cache it fills covers

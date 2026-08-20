@@ -261,12 +261,32 @@ refused and `--force` overrides it. A removal has no rollback of its own. It
 stops at the first hook that fails and reports what is left, because "undo the
 undo" is not a state any recipe describes.
 
+### Confirming
+
+An item that declares `confirm` (section 3) does not run until the question has
+been answered. There is one rule and no exemption that depends on the output
+mode: **`--yes` answers it, and a terminal may answer it live.**
+
+- at a terminal, without `--json`, shiro asks on stderr and reads the answer;
+  anything that is not `y` or `yes` is a no;
+- everywhere else, an unanswered question is a refusal (exit 3) naming the
+  question and `--yes`.
+
+A front end reads the question out of the listing, draws its own dialog and
+passes `--yes`. That flag is therefore the single signal that the question has
+been answered, by a human directly or by a program on a human's behalf.
+
+`--force` does not answer it. It skips the `check` gate and nothing else: the
+gate is about the state of the system and the question is about the intent of
+the user, and one is not evidence of the other.
+
 ### Flags
 
 | Flag | Effect |
 | --- | --- |
 | `--json` | Structured output, section 6. The only flag the reporting commands take. |
 | `--force` | Skip the `check` gate, and nothing else. |
+| `--yes` | Answer an item's `confirm` in advance. |
 | `--dry-run` | Print the exact command each hook would run, resolved, and run none of them. |
 | `--keep-partial` | Downgrade `atomic` to `phase` for this invocation. |
 | `--uninstall` | Remove instead of install. |

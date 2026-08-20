@@ -39,6 +39,12 @@ pub struct Options {
     pub dry_run: bool,
     /// Downgrade `atomic` to `phase` for this invocation.
     pub keep_partial: bool,
+    /// Answer an item's `confirm` before it is asked.
+    ///
+    /// Separate from `--force`, which skips the `check` gate and nothing else.
+    /// The two guard different things: the gate is about the system's state,
+    /// the question is about the user's intent.
+    pub yes: bool,
     /// Remove the item instead of installing it.
     ///
     /// A flag rather than a verb, because the path is the item's address and
@@ -83,6 +89,7 @@ fn flagged(args: &[String], executing: bool) -> Result<(Vec<String>, Options), E
             "--dry-run" if executing => opts.dry_run = true,
             "--keep-partial" if executing => opts.keep_partial = true,
             "--uninstall" if executing => opts.uninstall = true,
+            "--yes" if executing => opts.yes = true,
             flag if flag.starts_with('-') => {
                 return Err(Error::Usage(format!("unknown flag `{flag}`")));
             }
