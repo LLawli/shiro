@@ -12,7 +12,7 @@ use crate::catalog::Kind;
 use crate::render::{Child, Listing};
 
 /// Bumped by any change a consumer could notice, with a note in `CHANGELOG.md`.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 pub fn menu(listing: &Listing<'_>) -> String {
     let payload = json!({
@@ -36,6 +36,12 @@ fn child(child: &Child<'_>) -> Value {
     if let Some(description) = &node.description {
         object.insert("description".into(), description.clone().into());
     }
+    if let Some(icon) = &node.icon {
+        object.insert("icon".into(), icon.clone().into());
+    }
+    if !node.keywords.is_empty() {
+        object.insert("keywords".into(), node.keywords.clone().into());
+    }
 
     if node.kind == Kind::Item
         && let Some(item) = &node.item
@@ -44,6 +50,21 @@ fn child(child: &Child<'_>) -> Value {
             object.insert("mechanism".into(), mechanism.clone().into());
         }
         object.insert("privilege".into(), item.privilege.as_str().into());
+        if let Some(confirm) = &item.confirm {
+            object.insert("confirm".into(), confirm.clone().into());
+        }
+        // A false flag is omitted rather than emitted. It is the same rule as
+        // an absent field: "is it set" and "is it true" are one check, and a
+        // menu of two hundred children pays for every key that says nothing.
+        for (key, set) in [
+            ("destructive", item.destructive),
+            ("interactive", item.interactive),
+            ("keep_open", item.keep_open),
+        ] {
+            if set {
+                object.insert(key.into(), true.into());
+            }
+        }
     }
 
     object.insert("layer".into(), node.source.layer.as_str().into());

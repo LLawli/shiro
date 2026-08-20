@@ -39,6 +39,17 @@ fn json(output: &Output) -> Value {
     serde_json::from_str(&stdout(output)).expect("the payload parses")
 }
 
+/// A child by path, so that a test says which node it means rather than which
+/// slot the fixture's ordering happens to put it in.
+fn child<'a>(payload: &'a Value, path: &str) -> &'a Value {
+    payload["children"]
+        .as_array()
+        .expect("children is a list")
+        .iter()
+        .find(|child| child["path"] == path)
+        .unwrap_or_else(|| panic!("no child at `{path}`: {payload}"))
+}
+
 #[test]
 fn the_root_lists_what_the_layers_contributed() {
     let out = shiro("valid", &[]);
@@ -52,7 +63,7 @@ fn a_menu_lists_its_children_with_a_status_each() {
     assert!(out.status.success(), "{}", stderr(&out));
 
     let payload = json(&out);
-    assert_eq!(payload["schema"], 1);
+    assert_eq!(payload["schema"], 2);
     assert_eq!(payload["kind"], "menu");
     assert_eq!(payload["path"], "install.code");
     assert_eq!(payload["title"], "Code editors");
@@ -80,9 +91,7 @@ fn a_check_that_never_answers_reports_timeout() {
     assert!(out.status.success(), "{}", stderr(&out));
 
     let payload = json(&out);
-    let children = payload["children"].as_array().expect("children is a list");
-    assert_eq!(children[0]["path"], "install.games.steam");
-    assert_eq!(children[0]["status"], "timeout");
+    assert_eq!(child(&payload, "install.games.steam")["status"], "timeout");
 }
 
 #[test]
@@ -172,6 +181,35 @@ fn every_schema_rule_is_enforced() {
     found("leaves the layer that declared it");
     found("it is `run` or `flatpak`");
     found("empty `app`");
+    found("matches every search");
+    found("no question to ask");
+}
+
+#[test]
+fn presentation_metadata_reaches_a_front_end_untouched() {
+    let out = shiro("valid", &["install", "games", "emulation", "--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let payload = json(&out);
+    let item = child(&payload, "install.games.emulation.retroarch");
+    assert_eq!(item["icon"], "\u{f11b}");
+    assert_eq!(item["keywords"][0], "emulador");
+    assert_eq!(item["confirm"], "RetroArch baixa vários gigabytes. Seguir?");
+
+    // A flag is emitted only when it is true, so that "is it set" and "is it
+    // true" are one check for a consumer, as with any other absent field.
+    assert_eq!(item["interactive"], true);
+    assert_eq!(item["keep_open"], true);
+    assert!(item.get("destructive").is_none(), "{item}");
+
+    // A menu is drawn as a row like any other, so it carries an icon too, and
+    // still carries none of the fields that describe running something.
+    let games = json(&shiro("valid", &["install", "games", "--json"]));
+    let menu = child(&games, "install.games.emulation");
+    assert_eq!(menu["kind"], "menu");
+    assert_eq!(menu["icon"], "applications-games");
+    assert!(menu.get("privilege").is_none(), "{menu}");
+    assert!(menu.get("status").is_none(), "{menu}");
 }
 
 #[test]

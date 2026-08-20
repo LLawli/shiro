@@ -15,3 +15,27 @@ mechanism = "flatpak"
 check        = "sleep 30"
 install      = "true"
 roll-install = "true"
+
+# Everything a graphical front end reads and shiro does not interpret. The menu
+# carries an icon too, because a menu is drawn as a row like any other.
+[[menu]]
+path     = "install.games.emulation"
+title    = "Emulation"
+icon     = "applications-games"
+keywords = ["emulador", "retro"]
+order    = 10
+
+[[item]]
+path        = "install.games.emulation.retroarch"
+title       = "RetroArch"
+icon        = "\uf11b"
+keywords    = ["emulador", "retro"]
+confirm     = "RetroArch baixa vários gigabytes. Seguir?"
+destructive = false
+interactive = true
+keep_open   = true
+mechanism   = "flatpak"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"

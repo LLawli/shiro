@@ -52,6 +52,10 @@ pub struct Node {
     pub description: Option<String>,
     pub order: Option<i64>,
     pub hidden: bool,
+    /// Lifted out of the declaration, like the title, because a menu declares
+    /// them too and a menu has no `ItemDecl` to read them from.
+    pub icon: Option<String>,
+    pub keywords: Vec<String>,
     /// The recipe, for an item.
     pub item: Option<ItemDecl>,
     pub source: Source,
@@ -150,6 +154,8 @@ impl Catalog {
                     .map(|order| order.to_string())
                     .unwrap_or_default(),
                 if node.hidden { "hidden" } else { "" },
+                node.icon.as_deref().unwrap_or(""),
+                &node.keywords.join("\u{1f}"),
                 node.source.layer.as_str(),
                 &node
                     .item

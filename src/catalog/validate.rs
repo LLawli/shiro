@@ -43,6 +43,8 @@ pub fn run(catalog: &Catalog) -> Vec<Finding> {
             ));
         }
 
+        presentation(node, &mut report);
+
         if let Some(item) = &node.item {
             recipe(item, &mut report);
             hooks(&item.hooks, node, &mut report);
@@ -70,6 +72,26 @@ fn parent(catalog: &Catalog, node: &Node, report: &mut impl FnMut(String)) {
             "its parent `{parent_path}` is an item, and an item has no children"
         )),
         Some(_) => {}
+    }
+}
+
+/// The presentation fields carry no behaviour, so the only thing to enforce is
+/// that they are not empty. An empty keyword matches every search, and an empty
+/// `confirm` is a dialog with no question in it: both are a field whose author
+/// believes they filled it.
+fn presentation(node: &Node, report: &mut impl FnMut(String)) {
+    if node
+        .keywords
+        .iter()
+        .any(|keyword| keyword.trim().is_empty())
+    {
+        report("`keywords` holds an empty entry, which matches every search".to_owned());
+    }
+
+    if let Some(item) = &node.item
+        && item.confirm.as_ref().is_some_and(|q| q.trim().is_empty())
+    {
+        report("`confirm` is empty, so there is no question to ask".to_owned());
     }
 }
 

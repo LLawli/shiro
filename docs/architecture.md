@@ -139,6 +139,37 @@ filtering and reporting, and it is what a front end shows as a badge. The
 engine never branches on it. The day it does, the boundary in section 5 is
 broken.
 
+**Presentation is catalog data.** A graphical front end needs more than a title
+and a description, and every one of these varies per node and per layer, which
+is exactly what makes it a declaration rather than something a front end can
+infer from a path. A front end that guesses an icon from the path breaks the
+moment a layer adds a node.
+
+| Field | Where | Meaning |
+| --- | --- | --- |
+| `icon` | menu, item | A Nerd Font glyph or an XDG icon name. shiro does not interpret it, and does not care which it is. |
+| `keywords` | menu, item | Search terms beyond the title, so that "wifi" finds "Rede". |
+| `confirm` | item | The question to ask before running. Its presence is what asks; its value is the wording. |
+| `destructive` | item | Style it as such. Not the same as `confirm`, and neither implies the other. |
+| `interactive` | item | The recipe needs a terminal: it prompts, or its progress is the point. |
+| `keep_open` | item | After running, the menu stays where it is. Right for "next wallpaper", wrong for "reboot". |
+
+None of them changes what the engine does, with the single exception of
+`confirm`, which is asked at a terminal (section 5). `interactive` in particular
+has no engine behavior at all, since a hook already inherits stdin: it exists so
+that a front end knows that `flatpak install` is a progress stream while
+`distrobox enter` is a shell, which it has no other way to tell.
+
+`confirm` is the question and not a boolean, so that the wording belongs to the
+layer that declared the item, which is also the layer that knows what language
+the menu speaks. There is no boolean form, for the same reason a hook has no
+third form.
+
+**Declaration fields are snake, hook keys are kebab.** `keep_open` and
+`pre_mutates` on one side, `roll-pre` and `roll-install` on the other. The TOML
+key and the JSON key are the same string, so there is no translation table
+between the format a recipe is written in and the payload a front end reads.
+
 ## 4. Recipe hooks
 
 Eight hooks. Every one of them is optional except as noted.
@@ -353,8 +384,12 @@ Listing a menu:
       "kind": "item",
       "title": "Visual Studio Code",
       "description": "Microsoft's editor, Flatpak build",
+      "icon": "com.visualstudio.code",
+      "keywords": ["vscode", "editor"],
       "mechanism": "flatpak",
       "privilege": "user",
+      "confirm": "Install Visual Studio Code?",
+      "interactive": true,
       "layer": "image",
       "status": "installed"
     }
@@ -368,6 +403,12 @@ lists with `"path": ""` and `"title": "shiro"`.
 **A field with no value is omitted, never emitted as null**, so that a
 consumer's "is it absent" and "is it empty" are the same check. A child that is
 a menu therefore carries no `mechanism`, `privilege` or `status`.
+
+**A boolean is emitted only when it is true**, by the same rule: absent and
+`false` are one answer, and a menu of two hundred children should not pay for a
+key per child that says nothing. `destructive`, `interactive` and `keep_open`
+appear when set and are absent otherwise. An empty `keywords` is omitted rather
+than emitted as `[]`.
 
 The native commands answer in the same shape when given `--json`: a `schema`
 field, a `kind` naming the payload (`doctor`, `version`, `validation`,

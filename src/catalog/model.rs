@@ -34,6 +34,11 @@ pub struct MenuDecl {
     /// Suppress a node inherited from a lower layer without replacing it.
     #[serde(default)]
     pub hidden: bool,
+    /// A Nerd Font glyph or an XDG icon name. shiro does not interpret it.
+    pub icon: Option<String>,
+    /// Search terms beyond the title, so that "wifi" finds "Rede".
+    #[serde(default)]
+    pub keywords: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +60,28 @@ pub struct ItemDecl {
     /// mandatory.
     #[serde(default)]
     pub pre_mutates: bool,
+    /// A Nerd Font glyph or an XDG icon name. shiro does not interpret it.
+    pub icon: Option<String>,
+    /// Search terms beyond the title.
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// The question to ask before running. Its presence is what asks, and its
+    /// value is the wording, so that the layer which declared the item is also
+    /// the one that decides what language the question is in.
+    pub confirm: Option<String>,
+    /// Style it as destructive. Not the same as `confirm`, and neither implies
+    /// the other.
+    #[serde(default)]
+    pub destructive: bool,
+    /// The recipe needs a terminal: it prompts, or its progress is the point.
+    /// No engine behaviour, since a hook already inherits stdin. It tells a
+    /// front end to open a terminal rather than render a progress stream.
+    #[serde(default)]
+    pub interactive: bool,
+    /// After running, the menu stays where it is. Right for "next wallpaper",
+    /// wrong for "reboot".
+    #[serde(default)]
+    pub keep_open: bool,
     #[serde(default)]
     pub hooks: Hooks,
     /// Recorded into the profile registry by the engine, and nothing else.

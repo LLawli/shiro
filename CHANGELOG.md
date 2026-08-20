@@ -6,7 +6,16 @@ here with the version that made it.
 
 ## Unreleased
 
+`schema` is **2**. A consumer written against 1 keeps working for everything it
+already read: the break is in what is new, listed under each entry.
+
 ### Added
+
+- Presentation metadata, which a front end cannot invent and shiro does not
+  interpret: `icon` and `keywords` on a menu or an item, and `confirm`,
+  `destructive`, `interactive` and `keep_open` on an item. They are emitted in a
+  menu listing when set, and omitted otherwise, which for a boolean means it
+  appears only when true. ([#2])
 
 - `SHIRO_SUDO_PROBE=0` drops the `sudo true` that runs before the first hook of
   a `system` item. It is for an elevator that keeps no credential cache, where

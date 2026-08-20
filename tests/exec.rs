@@ -269,7 +269,7 @@ fn json_reports_one_object_per_phase_transition() {
             ("installed", "result"),
         ]
     );
-    assert!(events.iter().all(|event| event["schema"] == 1));
+    assert!(events.iter().all(|event| event["schema"] == 2));
     assert_eq!(events.last().expect("a result")["exit"], 0);
 }
 

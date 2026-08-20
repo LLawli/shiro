@@ -68,3 +68,14 @@ title = "Child of an item"
 [item.hooks]
 install      = "true"
 roll-install = "true"
+
+# A keyword that matches every search, and a confirmation with no question.
+[[item]]
+path     = "broken.presentation"
+title    = "Bad presentation"
+keywords = ["editor", "  "]
+confirm  = ""
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
