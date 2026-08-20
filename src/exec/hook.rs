@@ -34,6 +34,22 @@ pub fn is_root() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
+/// Whether to fill the credential cache with a `sudo true` before the first
+/// hook runs.
+///
+/// `SHIRO_SUDO_PROBE=0` turns it off, for an elevator that keeps no such cache
+/// and would therefore prompt here and again at every hook. A graphical front
+/// end routing through `pkexec` then pays one dialog for a one-hook recipe
+/// rather than two, and what it gives up is in `docs/decisions.md`: the
+/// cancelled password arrives as a hook failing rather than as a transaction
+/// that never started.
+///
+/// Exactly `0` turns it off, and nothing else does: a variable that means one
+/// thing is spelled one way.
+pub fn probes() -> bool {
+    !matches!(std::env::var("SHIRO_SUDO_PROBE").as_deref(), Ok("0"))
+}
+
 /// A resolved hook: exactly what would run, which is also exactly what
 /// `--dry-run` prints.
 pub struct Invocation {

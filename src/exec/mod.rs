@@ -66,7 +66,7 @@ pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
     }
 
     gate(node, opts)?;
-    if elevated {
+    if elevated && hook::probes() {
         authenticate()?;
     }
 
@@ -98,7 +98,9 @@ fn gate(node: &Node, opts: &Options) -> Result<(), Error> {
     }
 }
 
-/// One prompt, up front, before any hook runs.
+/// One prompt, up front, before any hook runs, which is what the credential
+/// cache it fills is for. Skipped entirely when `SHIRO_SUDO_PROBE=0` says the
+/// elevator keeps no cache for it to fill.
 fn authenticate() -> Result<(), Error> {
     let elevator = hook::elevator();
     let (program, args) = elevator.split_first().expect("the elevator is never empty");

@@ -232,6 +232,34 @@ script rather than as `VAR=value` in front of the command, because a default
 sudoers refuses the latter. `--dry-run` prints the same form, so what a user
 reads before authorising is what runs.
 
+## The probe can be dropped, and shiro never detects the elevator
+
+`SHIRO_SUDO_PROBE=0` skips the `sudo true` that runs before the first hook.
+
+It exists for `pkexec`, which is the elevator a graphical front end wants,
+because it routes to the desktop's polkit agent rather than needing a terminal,
+and which keeps no credential cache. The probe therefore authenticates nothing
+under it: it is one password dialog, and the hooks still ask again. Two dialogs
+for one menu click is enough to push a front end back to `sudo` in a terminal,
+which is the outcome the polkit agent existed to avoid.
+
+**Rejected: detecting `pkexec` and dropping the probe automatically.** It is the
+same shape as the `:reset` special case rejected in the permissions module. It
+reads as neutral and quietly turns the elevator's name into a dispatch key with
+one user, after which the engine owes the same knowledge to `run0`, to `doas`
+and to whatever comes next. The variable puts the decision where the knowledge
+is, which is with whoever configured the elevator.
+
+**Rejected: dropping the probe outright.** Under `sudo`, which is the default,
+the probe is the entire mechanism behind "prompt once, up front": without it,
+that promise becomes a property of how many hooks a recipe happens to declare.
+
+The cost is real and is the reason this is opt-in rather than the default. With
+the probe, a cancelled password leaves the transaction unstarted and shiro says
+so. Without it, the same cancellation arrives as the first hook failing, and the
+item's rollback policy runs on top of it. A front end that sets the variable is
+trading a clean refusal for one dialog, knowingly.
+
 ## Privilege is declared per item, not per hook
 
 Per-hook privilege is more precise and was rejected. It puts an authentication

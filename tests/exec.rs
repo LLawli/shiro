@@ -5,6 +5,7 @@
 //! phase order, what a failure undoes, and the exit code each outcome leaves.
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -19,15 +20,44 @@ fn state(name: &str) -> PathBuf {
 }
 
 fn shiro(state: &Path, args: &[&str]) -> Output {
+    shiro_with(state, args, &[])
+}
+
+fn shiro_with(state: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/exec");
-    Command::new(env!("CARGO_BIN_EXE_shiro"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_shiro"));
+    command
         .args(args)
         .env("SHIRO_ROOT", &root)
         .env("XDG_DATA_HOME", state.join("xdg"))
         .env("SHIRO_CHECK_TIMEOUT", "5")
-        .env("STATE", state)
-        .output()
-        .expect("the binary runs")
+        .env("STATE", state);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    command.output().expect("the binary runs")
+}
+
+/// An elevator that records what it was asked to run and then runs it, so that
+/// a test can count authentications without one ever reaching a real `sudo`.
+/// It logs the first argument alone: `true` for the probe, `sh` for a hook.
+fn elevator(state: &Path) -> String {
+    let path = state.join("elevator");
+    fs::write(
+        &path,
+        "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$STATE/elevator.log\"\nexec \"$@\"\n",
+    )
+    .expect("the scratch directory is writable");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("the script is ours");
+    path.display().to_string()
+}
+
+fn authentications(state: &Path) -> Vec<String> {
+    fs::read_to_string(state.join("elevator.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
 }
 
 fn log(state: &Path) -> Vec<String> {
@@ -281,6 +311,37 @@ fn a_system_item_carries_its_environment_through_the_elevator() {
         printed.contains("export SHIRO_ITEM=demo.system;"),
         "{printed}"
     );
+}
+
+#[test]
+fn the_up_front_probe_authenticates_before_the_first_hook() {
+    let state = state("probe-on");
+    let elevator = elevator(&state);
+    let out = shiro_with(&state, &["demo", "system"], &[("SHIRO_SUDO", &elevator)]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    // `true` is the probe, whose only job is to fill the credential cache that
+    // then covers the transaction; `sh` is the hook it covers.
+    assert_eq!(authentications(&state), ["true", "sh"]);
+    assert_eq!(log(&state), ["system"]);
+}
+
+#[test]
+fn the_probe_is_dropped_for_an_elevator_that_keeps_no_cache() {
+    let state = state("probe-off");
+    let elevator = elevator(&state);
+    let out = shiro_with(
+        &state,
+        &["demo", "system"],
+        &[("SHIRO_SUDO", &elevator), ("SHIRO_SUDO_PROBE", "0")],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    // There is no cache to fill under `pkexec`, so the probe is a password
+    // dialog that authenticates nothing. The hook prompts instead, which for a
+    // recipe with one hook is one dialog rather than two.
+    assert_eq!(authentications(&state), ["sh"]);
+    assert_eq!(log(&state), ["system"]);
 }
 
 #[test]

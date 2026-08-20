@@ -4,6 +4,20 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
+## Unreleased
+
+### Added
+
+- `SHIRO_SUDO_PROBE=0` drops the `sudo true` that runs before the first hook of
+  a `system` item. It is for an elevator that keeps no credential cache, where
+  the probe is a password dialog that fills nothing: a front end routing through
+  `pkexec` to the desktop's polkit agent then pays one dialog for a one-hook
+  recipe rather than two. What it gives up is the clean refusal, since a
+  cancelled password then arrives as the first hook failing. No payload changed,
+  so `schema` stays 1. ([#2])
+
+[#2]: https://github.com/LLawli/shiro/issues/2
+
 ## 0.1.1 (2026-08-17)
 
 ### Fixed

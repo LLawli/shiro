@@ -288,6 +288,20 @@ which fills the credential cache that then covers the transaction. A tool
 without such a cache will prompt again per hook, which is a property of that
 tool rather than of shiro.
 
+**`SHIRO_SUDO_PROBE=0` drops the probe.** Under an elevator that keeps no cache
+the probe fills nothing: it is one password dialog, and every hook still asks
+again afterwards. A graphical front end wants `pkexec` precisely because it
+routes to the desktop's polkit agent instead of needing a terminal, and two
+dialogs for one menu click is what pushes it back to `sudo` in a terminal. With
+the probe dropped, the first hook is what prompts, so a recipe with one hook
+costs one dialog.
+
+What that gives up is the clean refusal. With the probe, a cancelled password
+leaves the transaction unstarted and shiro says so and exits. Without it, the
+same cancellation arrives as the first hook failing, and whatever the rollback
+policy asks for runs on top of it. Exactly `0` drops the probe; any other value,
+and the absence of the variable, keeps it.
+
 An elevated hook carries its environment inside the script, as `export`
 statements ahead of the body, because sudo resets the environment and a default
 sudoers refuses `VAR=value` in front of a command. `--dry-run` prints that form,
