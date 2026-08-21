@@ -4,7 +4,7 @@
 
 Ferramental curado para Linux imutável, guiado por uma árvore de catálogo.
 
-> **Status: 0.1.0.** O motor está completo em relação ao contrato em
+> **Status: 0.2.0.** O motor está completo em relação ao contrato em
 > [docs/architecture.md](docs/architecture.md): o catálogo, o executor e o
 > módulo de permissões. Ele **não traz receitas**: a curadoria mora numa camada
 > acima dele, que neste ecossistema é o kuuhaku-os. Veja
@@ -20,8 +20,10 @@ configuração precisa vir depois. Esse conhecimento evapora entre uma
 reinstalação e a próxima.
 
 O shiro transforma isso numa árvore navegável e executável. Um catálogo TOML
-declara menus e itens; cada item carrega a receita que instala, configura,
-verifica e remove. O caminho do comando é o caminho na árvore:
+declara a árvore: menus para percorrer, itens que carregam a receita que
+instala, configura, verifica e remove, ações que simplesmente fazem algo, e
+listas cujos filhos um comando imprime enquanto o menu é desenhado. O caminho
+do comando é o caminho na árvore:
 
 ```sh
 shiro install                 # lista os grupos sob install
@@ -66,6 +68,9 @@ shiro install code vs-code              # instala, e recusa se o check disser qu
 shiro install code vs-code --force      # pula a porteira do check, e nada além disso
 shiro install code vs-code --dry-run    # imprime cada comando, sem executar nenhum
 shiro install code vs-code --uninstall  # remove
+shiro system lock                       # uma ação: executa, e nada é instalado
+shiro theme pick                        # uma lista: os filhos vêm de um comando
+shiro theme pick nord                   # executa o gancho da lista para a entrada
 ```
 
 `--keep-partial` rebaixa um rollback atômico para um por fase numa única
@@ -111,6 +116,42 @@ install      = "flatpak install --user -y flathub com.visualstudio.code"
 roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 ```
 
+Metade de um menu de desktop não é instalação. Um nó que não tem estado
+instalado é uma `[[action]]`, com um gancho só e nada a desfazer:
+
+```toml
+[[action]]
+path      = "system.lock"
+title     = "Travar a tela"
+privilege = "user"
+
+[action.hooks]
+run = "loginctl lock-session"
+```
+
+Um nó cujos filhos só existem em tempo de execução (os papéis de parede em
+disco, as boxes que existem, os aplicativos instalados) é uma `[[list]]`. Um
+comando imprime as entradas, o catálogo declara o que roda para a escolhida, e
+a entrada chega como `SHIRO_ENTRY`:
+
+```toml
+[[list]]
+path  = "theme.pick"
+title = "Tema"
+
+[list.entries]
+command = "kuuhaku-themes --json"   # imprime [{"id": "nord", "title": "Nord"}, ...]
+ttl     = "5s"                      # por quanto tempo reusar essa resposta
+
+[list.hooks]
+run = 'kuuhaku-theme set "$SHIRO_ENTRY"'
+```
+
+O `shiro theme pick` lista o que o gerador imprimiu e o `shiro theme pick nord`
+executa o gancho para aquela entrada, recusando uma entrada que o gerador não
+ofereceu. O gerador imprime identidades e nunca comandos: o que roda é
+declarado pelo catálogo, na camada que o administrador controla.
+
 O `shiro catalog validate` sai com código diferente de zero e nomeia o arquivo,
 o nó e o problema. O formato completo está em
 [docs/architecture.md](docs/architecture.md), seções 3 e 4.
@@ -122,9 +163,14 @@ o nó e o problema. O formato completo está em
 - **Quatro camadas de catálogo**, em precedência crescente: embutida no
   binário, `/usr/share/shiro/catalog/`, `/etc/shiro/catalog/` e a do usuário
   em `$XDG_DATA_HOME/shiro/catalog/`. Uma camada substitui um nó por inteiro.
+- **Quatro tipos de nó:** um `menu` para navegar, um `item` que instala, uma
+  `action` que simplesmente faz algo, e uma `list` cujos filhos um comando
+  imprime em tempo de execução. Nem uma ação nem uma lista reportam `status`,
+  porque não há nada nelas que esteja instalado.
 - **Oito ganchos por receita:** `check`, `pre`, `install`, `post`, `roll-pre`,
   `roll-install`, `roll-post`, `uninstall`. A remoção é derivada dos ganchos de
-  rollback quando `uninstall` não existe.
+  rollback quando `uninstall` não existe. Uma ação e uma lista declaram um
+  gancho só, `run`.
 - **O rollback é declarado, não adivinhado:** `atomic` desfaz tudo, `phase`
   desfaz só o que falhou, `none` não desfaz nada. Um rollback que falha é um
   desfecho próprio, com código de saída próprio.

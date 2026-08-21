@@ -4,7 +4,7 @@
 
 Curated tooling for immutable Linux, driven by a catalog tree.
 
-> **Status: 0.1.0.** The engine is complete against the contract in
+> **Status: 0.2.0.** The engine is complete against the contract in
 > [docs/architecture.md](docs/architecture.md): the catalog, the executor and
 > the permissions module. It ships **no recipes**: the curation lives in a layer
 > above it, which for this ecosystem is kuuhaku-os. See
@@ -18,8 +18,10 @@ is knowledge: which Flatpak id, which container, which Quadlet unit, and which
 configuration has to follow. That knowledge evaporates between reinstalls.
 
 shiro turns it into a tree you can navigate and execute. A TOML catalog
-declares menus and items; each item carries the recipe that installs,
-configures, checks and removes it. The command path is the tree path:
+declares the tree: menus to walk, items carrying the recipe that installs,
+configures, checks and removes something, actions that simply do something, and
+lists whose children a command prints while the menu is drawn. The command path
+is the tree path:
 
 ```sh
 shiro install                 # lists the groups under install
@@ -64,6 +66,9 @@ shiro install code vs-code              # install, refused if check says it is t
 shiro install code vs-code --force      # skip the check gate, nothing else
 shiro install code vs-code --dry-run    # print every command, run none of them
 shiro install code vs-code --uninstall  # remove it
+shiro system lock                       # an action: it runs, nothing is installed
+shiro theme pick                        # a list: its children come from a command
+shiro theme pick nord                   # runs the list's hook for that entry
 ```
 
 `--keep-partial` downgrades an atomic rollback to a per-phase one for a single
@@ -109,6 +114,42 @@ install      = "flatpak install --user -y flathub com.visualstudio.code"
 roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 ```
 
+Half of a desktop menu is not an installation. A node that has no installed
+state is an `[[action]]`, with one hook and nothing to roll back:
+
+```toml
+[[action]]
+path      = "system.lock"
+title     = "Lock the screen"
+privilege = "user"
+
+[action.hooks]
+run = "loginctl lock-session"
+```
+
+A node whose children only exist at run time (the wallpapers on disk, the boxes
+that exist, the applications installed) is a `[[list]]`. A command prints the
+entries, the catalog declares what runs for the one chosen, and the entry
+arrives as `SHIRO_ENTRY`:
+
+```toml
+[[list]]
+path  = "theme.pick"
+title = "Theme"
+
+[list.entries]
+command = "kuuhaku-themes --json"   # prints [{"id": "nord", "title": "Nord"}, ...]
+ttl     = "5s"                      # how long that answer may be reused
+
+[list.hooks]
+run = 'kuuhaku-theme set "$SHIRO_ENTRY"'
+```
+
+`shiro theme pick` lists what the generator printed and `shiro theme pick nord`
+runs the hook for that entry, refusing an entry the generator does not offer.
+The generator prints identities and never commands: what runs is declared by
+the catalog, in the layer an administrator controls.
+
 `shiro catalog validate` exits non-zero and names the file, the node and the
 problem. The full format is in
 [docs/architecture.md](docs/architecture.md), sections 3 and 4.
@@ -120,9 +161,14 @@ problem. The full format is in
 - **Four catalog layers**, in increasing precedence: built into the binary,
   `/usr/share/shiro/catalog/`, `/etc/shiro/catalog/`, and the user's own
   under `$XDG_DATA_HOME/shiro/catalog/`. A layer replaces a node wholesale.
+- **Four kinds of node:** a `menu` to navigate, an `item` that installs, an
+  `action` that simply does something, and a `list` whose children a command
+  prints at run time. Neither an action nor a list reports a `status`, because
+  nothing about them is installed.
 - **Eight hooks per recipe:** `check`, `pre`, `install`, `post`, `roll-pre`,
   `roll-install`, `roll-post`, `uninstall`. Removal is derived from the
-  rollback hooks when `uninstall` is absent.
+  rollback hooks when `uninstall` is absent. An action and a list declare one
+  hook, `run`.
 - **Rollback is declared, not guessed:** `atomic` undoes everything, `phase`
   undoes only what failed, `none` undoes nothing. A failing rollback is its own
   outcome, with its own exit code.
