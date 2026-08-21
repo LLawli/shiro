@@ -13,7 +13,7 @@
 use std::path::Path;
 
 use crate::catalog::model::{Hook, Hooks, ItemDecl, Rollback};
-use crate::catalog::{Catalog, Kind, Layer, Node};
+use crate::catalog::{Body, Catalog, Kind, Layer, Node};
 use crate::cli::NATIVE;
 
 pub struct Finding {
@@ -45,10 +45,17 @@ pub fn run(catalog: &Catalog) -> Vec<Finding> {
 
         presentation(node, &mut report);
 
-        if let Some(item) = node.item() {
-            recipe(item, &mut report);
-            hooks(&item.hooks, node, &mut report);
-            permissions(item, &mut report);
+        match &node.body {
+            Body::Menu => {}
+            Body::Item(item) => {
+                recipe(item, &mut report);
+                hooks(&item.hooks, node, &mut report);
+                permissions(item, &mut report);
+            }
+            // One hook, so one thing to check about it. Everything a recipe
+            // declares that an action must not is absent from the declaration
+            // rather than reported here.
+            Body::Action(action) => script(&action.hooks.run, "run", node, &mut report),
         }
     }
 
@@ -88,8 +95,10 @@ fn presentation(node: &Node, report: &mut impl FnMut(String)) {
         report("`keywords` holds an empty entry, which matches every search".to_owned());
     }
 
-    if let Some(item) = node.item()
-        && item.confirm.as_ref().is_some_and(|q| q.trim().is_empty())
+    if node
+        .runnable()
+        .and_then(|run| run.confirm)
+        .is_some_and(|question| question.trim().is_empty())
     {
         report("`confirm` is empty, so there is no question to ask".to_owned());
     }
@@ -128,38 +137,47 @@ fn hooks(hooks: &Hooks, node: &Node, report: &mut impl FnMut(String)) {
     ];
 
     for (name, hook) in declared {
-        let Some(Hook::Script(file)) = hook else {
-            continue;
-        };
-
-        // The built-in layer is embedded in the binary, so a script it points at
-        // is not on the host at all. Inlining it is the fix, and the alternative
-        // (extracting embedded scripts at run time) buys a temporary directory
-        // in the hot path for a case the base curation does not need yet.
-        if node.source.layer == Layer::BuiltIn {
-            report(format!(
-                "`{name}` points at the script `{file}`, but the built-in layer is embedded in \
-                 the binary and has no directory on disk; inline the script instead"
-            ));
-            continue;
+        if let Some(hook) = hook {
+            script(hook, name, node, report);
         }
+    }
+}
 
-        let path = Path::new(file);
-        if path.is_absolute() || path.components().any(|part| part.as_os_str() == "..") {
-            report(format!(
-                "`{name}` points at `{file}`, which leaves the layer that declared it; a script \
-                 is relative to its own recipe"
-            ));
-            continue;
-        }
+/// Where a `{ file = "..." }` hook may point. The rules are the same for every
+/// hook, an action's `run` included, which is why they live in one place rather
+/// than inside the loop that knows a recipe's hook names.
+fn script(hook: &Hook, name: &str, node: &Node, report: &mut impl FnMut(String)) {
+    let Hook::Script(file) = hook else {
+        return;
+    };
 
-        if let Some(dir) = node.source.dir.as_ref()
-            && !dir.join(path).is_file()
-        {
-            report(format!(
-                "`{name}` points at `{file}`, which does not exist next to the recipe"
-            ));
-        }
+    // The built-in layer is embedded in the binary, so a script it points at
+    // is not on the host at all. Inlining it is the fix, and the alternative
+    // (extracting embedded scripts at run time) buys a temporary directory
+    // in the hot path for a case the base curation does not need yet.
+    if node.source.layer == Layer::BuiltIn {
+        report(format!(
+            "`{name}` points at the script `{file}`, but the built-in layer is embedded in \
+             the binary and has no directory on disk; inline the script instead"
+        ));
+        return;
+    }
+
+    let path = Path::new(file);
+    if path.is_absolute() || path.components().any(|part| part.as_os_str() == "..") {
+        report(format!(
+            "`{name}` points at `{file}`, which leaves the layer that declared it; a script \
+             is relative to its own recipe"
+        ));
+        return;
+    }
+
+    if let Some(dir) = node.source.dir.as_ref()
+        && !dir.join(path).is_file()
+    {
+        report(format!(
+            "`{name}` points at `{file}`, which does not exist next to the recipe"
+        ));
     }
 }
 

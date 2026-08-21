@@ -42,21 +42,21 @@ fn child(child: &Child<'_>) -> Value {
         object.insert("keywords".into(), node.keywords.clone().into());
     }
 
-    if let Some(item) = node.item() {
-        if let Some(mechanism) = &item.mechanism {
-            object.insert("mechanism".into(), mechanism.clone().into());
+    if let Some(run) = node.runnable() {
+        if let Some(mechanism) = run.mechanism {
+            object.insert("mechanism".into(), mechanism.into());
         }
-        object.insert("privilege".into(), item.privilege.as_str().into());
-        if let Some(confirm) = &item.confirm {
-            object.insert("confirm".into(), confirm.clone().into());
+        object.insert("privilege".into(), run.privilege.as_str().into());
+        if let Some(confirm) = run.confirm {
+            object.insert("confirm".into(), confirm.into());
         }
         // A false flag is omitted rather than emitted. It is the same rule as
         // an absent field: "is it set" and "is it true" are one check, and a
         // menu of two hundred children pays for every key that says nothing.
         for (key, set) in [
-            ("destructive", item.destructive),
-            ("interactive", item.interactive),
-            ("keep_open", item.keep_open),
+            ("destructive", run.destructive),
+            ("interactive", run.interactive),
+            ("keep_open", run.keep_open),
         ] {
             if set {
                 object.insert(key.into(), true.into());

@@ -5,7 +5,8 @@
 //! The catalog under test is a fixture tree, reached through `SHIRO_ROOT` and
 //! `XDG_DATA_HOME`, so a test never reads the machine it runs on.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use serde_json::Value;
@@ -17,14 +18,28 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn shiro(catalog: &str, args: &[&str]) -> Output {
-    let root = fixture(catalog);
+    shiro_at(&fixture(catalog), args)
+}
+
+fn shiro_at(root: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shiro"))
         .args(args)
-        .env("SHIRO_ROOT", &root)
+        .env("SHIRO_ROOT", root)
         .env("XDG_DATA_HOME", root.join("xdg"))
         .env("SHIRO_CHECK_TIMEOUT", "1")
         .output()
         .expect("the binary runs")
+}
+
+/// A catalog written for one test, for the declarations that a checked-in
+/// fixture cannot hold: the ones the loader refuses outright.
+fn written(name: &str, toml: &str) -> PathBuf {
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let dir = root.join("etc/shiro/catalog");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&dir).expect("the scratch directory is writable");
+    fs::write(dir.join("one.toml"), toml).expect("the scratch directory is writable");
+    root
 }
 
 fn stdout(output: &Output) -> String {
@@ -183,6 +198,81 @@ fn every_schema_rule_is_enforced() {
     found("empty `app`");
     found("matches every search");
     found("no question to ask");
+    found("does not exist next to the recipe");
+}
+
+#[test]
+fn an_action_is_listed_as_a_verb_and_carries_no_status() {
+    let out = shiro("valid", &["install", "games", "emulation", "--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let payload = json(&out);
+    let action = child(&payload, "install.games.emulation.reset-pads");
+    assert_eq!(action["kind"], "action");
+    assert_eq!(action["icon"], "input-gaming");
+    assert_eq!(action["destructive"], true);
+    assert_eq!(action["privilege"], "user");
+
+    // The whole request in one assertion: `unknown` is the answer to "is this
+    // installed", and an action does not raise that question.
+    assert!(action.get("status").is_none(), "{action}");
+
+    // The item beside it does answer it, so the absence above is a statement
+    // about the kind rather than about this fixture having no `check`.
+    let item = child(&payload, "install.games.emulation.retroarch");
+    assert_eq!(item["status"], "unknown");
+}
+
+#[test]
+fn what_an_action_may_not_declare_is_refused_by_the_parser() {
+    // The whole reason an action is its own declaration rather than an item
+    // carrying a flag. The failure names the key and the line, at load, rather
+    // than arriving as a validator finding about a field that exists and means
+    // nothing here.
+    let root = written(
+        "action-with-check",
+        "[[action]]\npath = \"lock\"\ntitle = \"Lock\"\n\n\
+         [action.hooks]\nrun = \"true\"\ncheck = \"true\"\n",
+    );
+    let out = shiro_at(&root, &["--json"]);
+    assert_eq!(out.status.code(), Some(1));
+
+    let message = stderr(&out);
+    assert!(message.contains("unknown field `check`"), "{message}");
+    assert!(message.contains("expected `run`"), "{message}");
+
+    let root = written(
+        "action-with-rollback",
+        "[[action]]\npath = \"lock\"\ntitle = \"Lock\"\nrollback = \"none\"\n\n\
+         [action.hooks]\nrun = \"true\"\n",
+    );
+    let out = shiro_at(&root, &["--json"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        stderr(&out).contains("unknown field `rollback`"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn sources_lines_up_the_widest_kind() {
+    let out = shiro("valid", &["catalog", "sources"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    // `action` is a character wider than `menu` and `item`, and a column that
+    // is too narrow misaligns without failing anything.
+    let printed = stdout(&out);
+    let columns: Vec<usize> = printed
+        .lines()
+        .filter(|line| line.contains(" user "))
+        .map(|line| line.find(" user ").expect("the layer column"))
+        .collect();
+    assert!(columns.len() > 1, "{printed}");
+    assert!(
+        columns.windows(2).all(|pair| pair[0] == pair[1]),
+        "{printed}"
+    );
 }
 
 #[test]

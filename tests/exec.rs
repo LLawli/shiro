@@ -350,7 +350,11 @@ fn execution_flags_are_refused_on_a_menu() {
     let out = shiro(&state, &["demo", "--uninstall"]);
 
     assert_eq!(out.status.code(), Some(2));
-    assert!(stderr(&out).contains("act on an item"), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("act on something that runs"),
+        "{}",
+        stderr(&out)
+    );
 }
 
 #[test]
@@ -425,4 +429,76 @@ fn force_skips_the_gate_and_not_the_question() {
     // `--force` is documented as skipping the `check` gate and nothing else.
     assert_eq!(out.status.code(), Some(3));
     assert!(log(&state).is_empty(), "{:?}", log(&state));
+}
+
+#[test]
+fn an_action_runs_its_one_hook_and_reports_ok() {
+    let state = state("action");
+    let out = shiro(&state, &["demo", "act", "--json"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(log(&state), ["ran"]);
+
+    // One phase, named for what it is, and an outcome that is not "installed":
+    // nothing is present now that was absent before.
+    let events = events(&out);
+    let phases: Vec<&str> = events
+        .iter()
+        .filter_map(|event| event["phase"].as_str())
+        .collect();
+    assert_eq!(phases, ["run", "run"]);
+
+    let result = events.last().expect("a result");
+    assert_eq!(result["kind"], "result");
+    assert_eq!(result["outcome"], "ok");
+    assert_eq!(result["exit"], 0);
+}
+
+#[test]
+fn a_failing_action_undoes_nothing_and_says_so() {
+    let state = state("action-fails");
+    let out = shiro(&state, &["demo", "act-fails", "--json"]);
+
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(log(&state), ["tried"]);
+
+    // No rollback phase, because there is no rollback to declare: the log
+    // holding only what the hook wrote is the assertion.
+    let events = events(&out);
+    let result = events.last().expect("a result");
+    assert_eq!(result["outcome"], "failed");
+    assert!(stderr(&out).contains("exit 4"), "{}", stderr(&out));
+}
+
+#[test]
+fn transaction_flags_are_refused_on_an_action() {
+    let state = state("action-flags");
+    for flag in ["--uninstall", "--force", "--keep-partial"] {
+        let out = shiro(&state, &["demo", "act", flag]);
+        assert_eq!(out.status.code(), Some(2), "{flag}");
+        assert!(stderr(&out).contains("is an action"), "{}", stderr(&out));
+        assert!(log(&state).is_empty(), "{flag} ran the hook");
+    }
+}
+
+#[test]
+fn an_action_carries_its_privilege_like_an_item() {
+    let state = state("action-root");
+    let elevator = elevator(&state);
+    let out = shiro_with(&state, &["demo", "act-root"], &[("SHIRO_SUDO", &elevator)]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    assert_eq!(authentications(&state), ["true", "sh"]);
+    assert_eq!(log(&state), ["root"]);
+}
+
+#[test]
+fn a_dry_run_prints_what_an_action_would_do() {
+    let state = state("action-dry");
+    let out = shiro(&state, &["demo", "act", "--dry-run"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let printed = String::from_utf8(out.stdout).expect("output is utf-8");
+    assert!(printed.contains("==> run"), "{printed}");
+    assert!(printed.contains("echo ran"), "{printed}");
+    assert!(log(&state).is_empty(), "a dry run ran the hook");
 }

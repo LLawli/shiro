@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::catalog::model::{CatalogFile, ItemDecl, MenuDecl};
+use crate::catalog::model::{ActionDecl, CatalogFile, ItemDecl, MenuDecl};
 use crate::catalog::{Body, Catalog, Layer, LayerReport, Node, Source};
 use crate::error::Error;
 use crate::layers;
@@ -107,6 +107,9 @@ fn merge_file(
     for item in parsed.item {
         merge(node_from_item(item, source)?, source, nodes)?;
     }
+    for action in parsed.action {
+        merge(node_from_action(action, source)?, source, nodes)?;
+    }
     Ok(())
 }
 
@@ -137,6 +140,22 @@ fn node_from_item(decl: ItemDecl, source: &Source) -> Result<Node, Error> {
         icon: decl.icon.clone(),
         keywords: decl.keywords.clone(),
         body: Body::Item(Box::new(decl)),
+        source: source.clone(),
+        shadowed: Vec::new(),
+    })
+}
+
+fn node_from_action(decl: ActionDecl, source: &Source) -> Result<Node, Error> {
+    check_path(&decl.path, source)?;
+    Ok(Node {
+        path: decl.path.clone(),
+        title: decl.title.clone(),
+        description: decl.description.clone(),
+        order: decl.order,
+        hidden: decl.hidden,
+        icon: decl.icon.clone(),
+        keywords: decl.keywords.clone(),
+        body: Body::Action(Box::new(decl)),
         source: source.clone(),
         shadowed: Vec::new(),
     })

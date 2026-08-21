@@ -22,7 +22,7 @@ pub fn text(catalog: &Catalog) -> String {
         // did, and a node suppressed by a higher layer is exactly the kind of
         // thing someone comes here to find.
         out.push_str(&format!(
-            "{path:width$}  {kind:5}  {layer:9}  {file}{hidden}\n",
+            "{path:width$}  {kind:6}  {layer:9}  {file}{hidden}\n",
             path = node.path,
             kind = node.kind().as_str(),
             layer = node.source.layer.as_str(),
@@ -33,7 +33,7 @@ pub fn text(catalog: &Catalog) -> String {
         // Lowest first, which is the order they were replaced in.
         for shadowed in &node.shadowed {
             out.push_str(&format!(
-                "{:width$}  {:5}  {:9}  {} (overridden)\n",
+                "{:width$}  {:6}  {:9}  {} (overridden)\n",
                 "",
                 "",
                 shadowed.layer.as_str(),

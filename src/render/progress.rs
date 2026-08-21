@@ -19,6 +19,9 @@ use crate::render::json::SCHEMA;
 pub enum Outcome {
     Installed,
     Removed,
+    /// An action ran. Not "installed": there is nothing now present that was
+    /// absent before, which is the whole difference between the two.
+    Ok,
     /// Everything the transaction did was undone.
     RolledBack,
     /// Only the phase that failed was undone, and the rest stands.
@@ -33,6 +36,7 @@ impl Outcome {
         match self {
             Outcome::Installed => "installed",
             Outcome::Removed => "removed",
+            Outcome::Ok => "ok",
             Outcome::RolledBack => "rolled-back",
             Outcome::Partial => "partial",
             Outcome::Failed => "failed",
@@ -137,6 +141,7 @@ impl<'a> Progress<'a> {
         match outcome {
             Outcome::Installed => println!("\nInstalled `{path}`."),
             Outcome::Removed => println!("\nRemoved `{path}`."),
+            Outcome::Ok => println!("\nRan `{path}`."),
             Outcome::RolledBack => println!("\nRolled back `{path}`: the system is as it was."),
             Outcome::Partial => {
                 println!(

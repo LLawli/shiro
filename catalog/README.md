@@ -32,6 +32,19 @@ install      = "flatpak install --user -y flathub com.visualstudio.code"
 roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 ```
 
+A node that does something instead of installing something is an `[[action]]`,
+with one hook:
+
+```toml
+[[action]]
+path      = "system.lock"
+title     = "Lock the screen"
+privilege = "user"
+
+[action.hooks]
+run = "loginctl lock-session"
+```
+
 The format is specified in [../docs/architecture.md](../docs/architecture.md),
 sections 3 and 4. `shiro catalog validate` enforces it, and it is the thing to
 run before shipping a layer.

@@ -136,3 +136,26 @@ confirm = "Really?"
 [item.hooks]
 install      = 'echo confirmed >> "$STATE/log"'
 roll-install = 'true'
+
+# One hook, no gate, nothing to undo.
+[[action]]
+path  = "demo.act"
+title = "Does something once"
+
+[action.hooks]
+run = 'echo ran >> "$STATE/log"'
+
+[[action]]
+path  = "demo.act-fails"
+title = "Does something badly"
+
+[action.hooks]
+run = 'echo tried >> "$STATE/log"; exit 4'
+
+[[action]]
+path      = "demo.act-root"
+title     = "Does something as root"
+privilege = "system"
+
+[action.hooks]
+run = 'echo root >> "$STATE/log"'

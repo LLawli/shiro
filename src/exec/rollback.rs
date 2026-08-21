@@ -37,8 +37,10 @@ pub fn undo(hooks: &Hooks, phase: Phase) -> Option<(Phase, &Hook)> {
         Phase::Post => (Phase::RollPost, &hooks.roll_post),
         // A rollback hook has no rollback of its own, and neither does a
         // removal: there is no third level, by design. The registry write is
-        // undone by the engine itself, not by a hook.
-        Phase::Uninstall
+        // undone by the engine itself, not by a hook. An action never reaches
+        // here at all, since it is not a transaction and has nothing to undo.
+        Phase::Run
+        | Phase::Uninstall
         | Phase::Permissions
         | Phase::RollPre
         | Phase::RollInstall

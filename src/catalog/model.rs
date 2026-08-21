@@ -22,6 +22,8 @@ pub struct CatalogFile {
     pub menu: Vec<MenuDecl>,
     #[serde(default)]
     pub item: Vec<ItemDecl>,
+    #[serde(default)]
+    pub action: Vec<ActionDecl>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +88,51 @@ pub struct ItemDecl {
     pub hooks: Hooks,
     /// Recorded into the profile registry by the engine, and nothing else.
     pub permissions: Option<PermissionsDecl>,
+}
+
+/// Something the catalog can do that has no installed state: lock the screen,
+/// reboot, take a screenshot, cycle the wallpaper.
+///
+/// It is a declaration of its own rather than an item with a flag on it, and
+/// that is the whole point. `check`, `rollback`, `uninstall` and `pre_mutates`
+/// are not fields here, so a recipe that sets one is refused by the parser,
+/// naming the key, rather than by four rules in the validator saying that a
+/// field which exists means nothing in this case. Presence has no meaning for
+/// "reboot", and an engine that reported `unknown` for it was answering a
+/// question nobody asked.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionDecl {
+    pub path: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub order: Option<i64>,
+    #[serde(default)]
+    pub hidden: bool,
+    /// A label, for grouping and display. The engine never branches on it.
+    pub mechanism: Option<String>,
+    #[serde(default)]
+    pub privilege: Privilege,
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    pub confirm: Option<String>,
+    #[serde(default)]
+    pub destructive: bool,
+    #[serde(default)]
+    pub interactive: bool,
+    #[serde(default)]
+    pub keep_open: bool,
+    pub hooks: ActionHooks,
+}
+
+/// One hook, because an action has one phase. There is no rollback set here
+/// and no `check`, for the same reason there is no third form of a hook: the
+/// shape of the declaration is what says so.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionHooks {
+    pub run: Hook,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]

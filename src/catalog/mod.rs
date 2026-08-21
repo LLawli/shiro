@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
-use crate::catalog::model::ItemDecl;
+use crate::catalog::model::{ActionDecl, ItemDecl, Privilege};
 pub use crate::layers::Layer;
 
 /// Where a declaration came from.
@@ -33,6 +33,7 @@ pub struct Source {
 pub enum Kind {
     Menu,
     Item,
+    Action,
 }
 
 impl Kind {
@@ -40,6 +41,7 @@ impl Kind {
         match self {
             Kind::Menu => "menu",
             Kind::Item => "item",
+            Kind::Action => "action",
         }
     }
 }
@@ -58,6 +60,7 @@ impl Kind {
 pub enum Body {
     Menu,
     Item(Box<ItemDecl>),
+    Action(Box<ActionDecl>),
 }
 
 impl Body {
@@ -65,8 +68,25 @@ impl Body {
         match self {
             Body::Menu => Kind::Menu,
             Body::Item(_) => Kind::Item,
+            Body::Action(_) => Kind::Action,
         }
     }
+}
+
+/// What an item and an action have in common: the part that describes running
+/// something, as opposed to the part that describes a node.
+///
+/// Collected here so that a caller which only wants to know "may this elevate,
+/// does it ask a question, what label does it wear" does not have to know which
+/// of the two it is holding. Nothing about installing is in it, because that is
+/// exactly what an action does not have.
+pub struct Runnable<'a> {
+    pub mechanism: Option<&'a str>,
+    pub privilege: Privilege,
+    pub confirm: Option<&'a str>,
+    pub destructive: bool,
+    pub interactive: bool,
+    pub keep_open: bool,
 }
 
 #[derive(Debug)]
@@ -103,6 +123,29 @@ impl Node {
         match &self.body {
             Body::Item(item) => Some(item),
             _ => None,
+        }
+    }
+
+    /// What describes running this node, for the two kinds that run.
+    pub fn runnable(&self) -> Option<Runnable<'_>> {
+        match &self.body {
+            Body::Menu => None,
+            Body::Item(item) => Some(Runnable {
+                mechanism: item.mechanism.as_deref(),
+                privilege: item.privilege,
+                confirm: item.confirm.as_deref(),
+                destructive: item.destructive,
+                interactive: item.interactive,
+                keep_open: item.keep_open,
+            }),
+            Body::Action(action) => Some(Runnable {
+                mechanism: action.mechanism.as_deref(),
+                privilege: action.privilege,
+                confirm: action.confirm.as_deref(),
+                destructive: action.destructive,
+                interactive: action.interactive,
+                keep_open: action.keep_open,
+            }),
         }
     }
 }

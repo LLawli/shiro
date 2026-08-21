@@ -174,6 +174,37 @@ broken state, and a removal command written for the intact case can fail there
 in ways that are hard to diagnose. The derivation should go from the more
 defensive form to the less defensive one, not the other way around.
 
+## An action is its own declaration, not an item with a flag
+
+`[[action]]` alongside `[[menu]]` and `[[item]]`, rather than
+`kind = "action"` on an item, which is how it was first proposed.
+
+A desktop menu is mostly things that have no installed state: lock, reboot,
+suspend, screenshot, cycle the wallpaper, restart the shell. Shaped as items,
+they lie in four fields at once. `check` would have to answer a question they
+do not raise, `rollback` describes an undo that does not exist, and a front end
+receives `status: unknown`, which reads as "shiro could not determine whether
+this is installed" and means nothing at all about rebooting.
+
+**Rejected: a `kind` field on `[[item]]`.** It is one struct instead of two and
+it costs four negative rules in the validator, each saying that a field which
+exists means nothing in this case. Worse, a recipe that sets `check` on an
+action then loads successfully and is only reported later, by a command nobody
+is obliged to run. As its own declaration, `check` is simply not a field, so the
+parser refuses it, names the key and the line, and does it at load. That is the
+same mechanism that already keeps `privilege` off a `check`, recorded in
+section 4 of architecture.md: the shape of the declaration is the rule.
+
+The cost is real and is duplication: `MenuDecl`, `ItemDecl` and `ActionDecl`
+repeat the fields they share, because `#[serde(flatten)]` silently disables
+`deny_unknown_fields`, and that flag is what makes `mechnism = "flatpak"` an
+error rather than a lost field. Given the choice between repeating six field
+declarations and losing the rule that catches every typo in every catalog, the
+repetition is the cheaper half by a wide margin.
+
+The JSON is unaffected by any of this: `kind` is `"action"` there, which is what
+a front end was going to be told either way.
+
 ## The main hook is named `install`, not `in`
 
 `in` was the first name and was changed before any catalog existed. It is a

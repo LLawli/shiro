@@ -187,12 +187,12 @@ fn mechanisms(catalog: &Catalog) -> Vec<(String, usize)> {
     let mut counted: BTreeMap<String, usize> = BTreeMap::new();
 
     for node in catalog.iter() {
-        let Some(item) = node.item() else {
+        let Some(run) = node.runnable() else {
             continue;
         };
-        let label = item
+        let label = run
             .mechanism
-            .clone()
+            .map(str::to_owned)
             .unwrap_or_else(|| "(unlabelled)".to_owned());
         *counted.entry(label).or_default() += 1;
     }

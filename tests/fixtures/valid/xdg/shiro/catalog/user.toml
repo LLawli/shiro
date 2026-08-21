@@ -39,3 +39,16 @@ mechanism   = "flatpak"
 [item.hooks]
 install      = "true"
 roll-install = "true"
+
+# An action: it runs, and there is no sense in which it is installed. The
+# listing carries no `status` for it at all.
+[[action]]
+path        = "install.games.emulation.reset-pads"
+title       = "Reset the controllers"
+description = "Drops the pairing of every pad"
+icon        = "input-gaming"
+destructive = true
+order       = 20
+
+[action.hooks]
+run = "true"

@@ -13,8 +13,8 @@ pub mod rollback;
 use std::io::{Write, stderr, stdin};
 use std::process::Command;
 
-use crate::catalog::Node;
-use crate::catalog::model::{Hook, ItemDecl, Privilege, Rollback};
+use crate::catalog::model::{ActionDecl, Hook, ItemDecl, Privilege, Rollback};
+use crate::catalog::{Body, Node};
 use crate::cli::Options;
 use crate::error::Error;
 use crate::exec::check::Status;
@@ -23,6 +23,9 @@ use crate::render::progress::{Outcome, Progress};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
+    /// The single phase of an action. Not a step in a transaction: there is
+    /// nothing before it and nothing to undo after it.
+    Run,
     Pre,
     Install,
     Post,
@@ -38,6 +41,7 @@ pub enum Phase {
 impl Phase {
     pub fn as_str(self) -> &'static str {
         match self {
+            Phase::Run => "run",
             Phase::Pre => "pre",
             Phase::Install => "install",
             Phase::Post => "post",
@@ -50,8 +54,75 @@ impl Phase {
     }
 }
 
-pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
-    let item = node.item().expect("only an item reaches the executor");
+/// What naming a node that is not a menu means.
+pub fn run(node: &Node, opts: &Options) -> Result<(), Error> {
+    match &node.body {
+        Body::Item(item) => recipe(node, item, opts),
+        Body::Action(declared) => action(node, declared, opts),
+        Body::Menu => unreachable!("a menu lists itself and never reaches the executor"),
+    }
+}
+
+/// An action: one hook, no gate, no rollback, no removal.
+///
+/// The flags that belong to a transaction are refused rather than ignored. An
+/// action has no `check` for `--force` to skip and nothing for `--uninstall` or
+/// `--keep-partial` to act on, and a flag that is silently dropped is a flag
+/// whose user believes it did something.
+fn action(node: &Node, declared: &ActionDecl, opts: &Options) -> Result<(), Error> {
+    let refused = [
+        ("--uninstall", opts.uninstall),
+        ("--force", opts.force),
+        ("--keep-partial", opts.keep_partial),
+    ]
+    .into_iter()
+    .find_map(|(flag, passed)| passed.then_some(flag));
+
+    if let Some(flag) = refused {
+        return Err(Error::Usage(format!(
+            "`{flag}` acts on an installation, and `{}` is an action: it has no `check` to \
+             skip and nothing to undo",
+            node.path
+        )));
+    }
+
+    let progress = Progress::new(opts.json, node);
+    let elevated = declared.privilege == Privilege::System && !hook::is_root();
+
+    if opts.dry_run {
+        let invocation = hook::build(
+            node,
+            &declared.hooks.run,
+            Phase::Run.as_str(),
+            elevated,
+            true,
+        );
+        progress.dry_run(Phase::Run, &invocation.describe(), invocation.elevated());
+        progress.result(Outcome::DryRun, 0);
+        return Ok(());
+    }
+
+    confirm(node, opts)?;
+    if elevated && hook::probes() {
+        authenticate()?;
+    }
+
+    match run_phase(node, &declared.hooks.run, Phase::Run, elevated, &progress)? {
+        0 => {
+            progress.result(Outcome::Ok, 0);
+            Ok(())
+        }
+        code => {
+            progress.result(Outcome::Failed, 1);
+            Err(Error::Failed(format!(
+                "`{}` failed (exit {code})",
+                node.path
+            )))
+        }
+    }
+}
+
+fn recipe(node: &Node, item: &ItemDecl, opts: &Options) -> Result<(), Error> {
     let progress = Progress::new(opts.json, node);
 
     // Decided once, before anything runs. A password prompt in the middle of a
@@ -64,7 +135,7 @@ pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
     }
 
     gate(node, opts)?;
-    confirm(node, item, opts)?;
+    confirm(node, opts)?;
     if elevated && hook::probes() {
         authenticate()?;
     }
@@ -112,8 +183,12 @@ fn gate(node: &Node, opts: &Options) -> Result<(), Error> {
 /// `--force` deliberately does not answer it: it skips the `check` gate and
 /// nothing else. The two guard different things, the system's state and the
 /// user's intent.
-fn confirm(node: &Node, item: &ItemDecl, opts: &Options) -> Result<(), Error> {
-    let Some(question) = &item.confirm else {
+fn confirm(node: &Node, opts: &Options) -> Result<(), Error> {
+    let Some(question) = node
+        .runnable()
+        .and_then(|run| run.confirm)
+        .map(str::to_owned)
+    else {
         return Ok(());
     };
     if opts.yes {

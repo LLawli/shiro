@@ -55,6 +55,10 @@ pub fn batch(nodes: &[&Node]) -> Vec<Option<Status>> {
         .iter()
         .map(|node| match node.kind() {
             Kind::Menu => None,
+            // An action has no presence to report on. Reporting `unknown` for
+            // it would be answering a question it does not raise, which is what
+            // a front end drawing "Reboot" as a missing package looks like.
+            Kind::Action => None,
             // No `check` declared is not a failure to answer, it is the answer:
             // this item does not say how to tell.
             Kind::Item => Some(Status::Unknown),

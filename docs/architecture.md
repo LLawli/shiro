@@ -17,10 +17,17 @@ shiro install code            # node "install/code": a menu, lists children
 shiro install code vs-code    # node "install/code/vs-code": an item, executes
 ```
 
-Two node kinds, and the kind alone decides what an invocation means:
+Three node kinds, and the kind alone decides what an invocation means:
 
 - **menu**: has children, has nothing to execute. Naming it lists its children.
 - **item**: a leaf carrying a recipe. Naming it runs the recipe.
+- **action**: a leaf carrying one command. Naming it runs the command.
+
+An item is something that becomes present: it has a `check` that answers whether
+it is there, hooks that put it there, and a way back. An action is something
+that happens: locking the screen, rebooting, taking a screenshot, cycling the
+wallpaper. Nothing about it is ever "installed", nothing about it can be undone,
+and a `check` on it would be answering a question nobody asked.
 
 There is no `list` verb, and therefore no reserved word that a catalog author
 can collide with. A menu with no arguments left to consume *is* the list.
@@ -114,6 +121,28 @@ roll-install = "flatpak uninstall --user -y com.visualstudio.code"
 An item may also declare `[item.permissions]`, which the engine records into
 the profile registry and does nothing else with. See section 9.
 
+An action is declared with `[[action]]`, and carries one hook:
+
+```toml
+[[action]]
+path        = "system.lock"
+title       = "Lock the screen"
+description = "Locks now; the shell asks for the password on return"
+icon        = "system-lock-screen"
+privilege   = "user"
+
+[action.hooks]
+run = "qs -c jibril ipc call lock lock"
+```
+
+It takes `path`, `title`, `description`, `order`, `hidden`, `mechanism`,
+`privilege` and the presentation fields below, which is everything an item takes
+except the parts about being installed. **`check`, `rollback`, `uninstall`,
+`pre_mutates` and `[item.permissions]` are not fields of an action**, so a
+declaration that sets one is refused by the parser, naming the key, rather than
+carrying a field that means nothing. That is the same mechanism that keeps
+`privilege` off a `check`: the shape of the declaration is what says so.
+
 **A path is segments joined by dots, and a segment is what the user types.** A
 segment matches `[a-z0-9][a-z0-9_-]*`: it is lowercase, and it never needs
 quoting, because a segment that has to be quoted is a segment nobody can type
@@ -147,12 +176,12 @@ moment a layer adds a node.
 
 | Field | Where | Meaning |
 | --- | --- | --- |
-| `icon` | menu, item | A Nerd Font glyph or an XDG icon name. shiro does not interpret it, and does not care which it is. |
-| `keywords` | menu, item | Search terms beyond the title, so that "wifi" finds "Rede". |
-| `confirm` | item | The question to ask before running. Its presence is what asks; its value is the wording. |
-| `destructive` | item | Style it as such. Not the same as `confirm`, and neither implies the other. |
-| `interactive` | item | The recipe needs a terminal: it prompts, or its progress is the point. |
-| `keep_open` | item | After running, the menu stays where it is. Right for "next wallpaper", wrong for "reboot". |
+| `icon` | menu, item, action | A Nerd Font glyph or an XDG icon name. shiro does not interpret it, and does not care which it is. |
+| `keywords` | menu, item, action | Search terms beyond the title, so that "wifi" finds "Rede". |
+| `confirm` | item, action | The question to ask before running. Its presence is what asks; its value is the wording. |
+| `destructive` | item, action | Style it as such. Not the same as `confirm`, and neither implies the other. |
+| `interactive` | item, action | The recipe needs a terminal: it prompts, or its progress is the point. |
+| `keep_open` | item, action | After running, the menu stays where it is. Right for "next wallpaper", wrong for "reboot". |
 
 None of them changes what the engine does, with the single exception of
 `confirm`, which is asked at a terminal (section 5). `interactive` in particular
@@ -172,7 +201,7 @@ between the format a recipe is written in and the payload a front end reads.
 
 ## 4. Recipe hooks
 
-Eight hooks. Every one of them is optional except as noted.
+Eight hooks on an item. Every one of them is optional except as noted.
 
 | Hook | Role |
 | --- | --- |
@@ -184,6 +213,12 @@ Eight hooks. Every one of them is optional except as noted.
 | `roll-install` | Undoes the installation. |
 | `roll-pre` | Undoes `pre`. |
 | `uninstall` | Removes an item that is installed and intact. |
+
+An action has one, and it is mandatory:
+
+| Hook | Role |
+| --- | --- |
+| `run` | Does the thing. An action has one phase, so it has one hook. |
 
 Schema rules the validator enforces:
 
@@ -200,7 +235,12 @@ Schema rules the validator enforces:
 - a `{ file = ... }` hook may not appear in the built-in layer at all, which is
   embedded in the binary and has no directory on disk. Inline the script;
 - `[item.permissions]` names `run` or `flatpak` as its backend, and a non-empty
-  `app`.
+  `app`;
+- `keywords` holds no empty entry and `confirm`, where declared, is not empty.
+
+The rules about `{ file = ... }` apply to an action's `run` exactly as they do
+to any hook of a recipe. The rules about rollback do not apply to an action at
+all, because it declares nothing they could be about.
 
 Two rules from this section are enforced before validation and so never appear
 as findings. A malformed path is refused by the loader. A hook carrying anything
@@ -240,6 +280,14 @@ removal genuinely differs from undoing a broken transaction.
 ## 5. Execution model
 
 ### Order
+
+An action runs its `run` hook and stops. There is no gate in front of it, since
+it declares no `check`, and nothing behind it, since it declares no rollback.
+`--force`, `--uninstall` and `--keep-partial` are refused on an action rather
+than ignored: there is nothing for them to act on, and a flag that is silently
+dropped is a flag whose user believes it did something.
+
+A recipe runs in four steps:
 
 `check` (gate) → `pre` → `install` → `post`.
 
@@ -435,6 +483,11 @@ field, a `kind` naming the payload (`doctor`, `version`, `validation`,
 `sources`), and the body. They are versioned by the same field for the same
 reason.
 
+**An action carries no `status` at all**, rather than `unknown`. The field
+answers "is this installed", and that question does not arise for "reboot": a
+front end reading `unknown` there would draw a verb as a package whose presence
+could not be determined. A menu carries none either, for the same reason.
+
 `status` is one of `installed`, `absent`, `unknown` (no `check` declared, or it
 would require elevation) or `timeout`. A front end uses it to decide which
 action to offer, and then **invokes that action explicitly**: shiro has no
@@ -452,9 +505,13 @@ outcome and the exit code.
 ```
 
 `state` is `start`, `ok`, `failed` or `dry-run`. `outcome` is `installed`,
-`removed`, `rolled-back` (the transaction failed and everything was undone),
-`partial` (it failed and only the failed phase was undone), `failed`,
-`rollback-failed` or `dry-run`.
+`removed`, `ok` (an action ran), `rolled-back` (the transaction failed and
+everything was undone), `partial` (it failed and only the failed phase was
+undone), `failed`, `rollback-failed` or `dry-run`.
+
+An action emits the same two objects as any recipe, with `run` as the phase and
+`ok` as the outcome. It is deliberately not `installed`: nothing is present now
+that was absent before, which is the whole difference between the two kinds.
 
 **A hook's own output goes to stderr under `--json`**, so a long install still
 shows its progress while stdout stays a clean stream of objects. Capturing it

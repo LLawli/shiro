@@ -79,3 +79,11 @@ confirm  = ""
 [item.hooks]
 install      = "true"
 roll-install = "true"
+
+# An action whose only hook points at a script that is not there.
+[[action]]
+path  = "broken.act"
+title = "Missing run script"
+
+[action.hooks]
+run = { file = "gone.sh" }

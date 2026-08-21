@@ -49,14 +49,23 @@ pub fn menu(listing: &Listing<'_>) -> String {
             // A menu is not a thing that is installed or missing, it is a place
             // to go, and the arrow is what says so.
             (Kind::Menu, _) => "\u{203a}".to_owned(),
+            // An action is a verb. The blank column is what distinguishes it
+            // from an item that declares no `check` and reports `unknown`.
+            (Kind::Action, _) => String::new(),
             (Kind::Item, Some(status)) => status.as_str().to_owned(),
             (Kind::Item, None) => String::new(),
         };
 
-        out.push_str(&format!(
-            "  {segment:width$}  {title:titles$}  {status}\n",
-            title = child.node.title,
-        ));
+        // Trimmed, because the status column is empty for an action and a
+        // padded blank leaves trailing whitespace on the line.
+        out.push_str(
+            format!(
+                "  {segment:width$}  {title:titles$}  {status}",
+                title = child.node.title,
+            )
+            .trim_end(),
+        );
+        out.push('\n');
     }
 
     out

@@ -16,14 +16,14 @@ pub fn path(segments: &[String], opts: &Options) -> Result<(), Error> {
     let node = resolve::resolve(&catalog, segments)?;
 
     if let Some(node) = node
-        && node.kind() == Kind::Item
+        && node.kind() != Kind::Menu
     {
-        return exec::item(node, opts);
+        return exec::run(node, opts);
     }
 
-    if opts.force || opts.dry_run || opts.keep_partial || opts.uninstall {
+    if opts.force || opts.dry_run || opts.keep_partial || opts.uninstall || opts.yes {
         return Err(Error::Usage(
-            "those flags act on an item, and this path names a menu".to_owned(),
+            "those flags act on something that runs, and this path names a menu".to_owned(),
         ));
     }
 

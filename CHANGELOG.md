@@ -22,7 +22,20 @@ already read: the break is in what is new, listed under each entry.
   that draws its own dialog from the `confirm` text in the listing passes
   `--yes` afterwards. ([#2])
 
+- `[[action]]`, a third kind of node: one `run` hook, no `check`, no rollback,
+  no removal. It is for what a desktop menu is mostly made of, which is things
+  that happen rather than things that become present. In a listing it carries
+  `"kind": "action"` and **no `status` field at all**, rather than the
+  `"unknown"` an item without a `check` reports. `--force`, `--uninstall` and
+  `--keep-partial` are refused on one. Running it emits the phase `run` and the
+  outcome `ok`. ([#2])
+
 ### Changed
+
+- `kind` in a payload can now be `"action"`, and an `action` child carries no
+  `status`. A consumer that switches on `kind`, or that reads `status`
+  unconditionally, has to handle both. This is the break that makes `schema` 2.
+  ([#2])
 
 - An item declaring `confirm` no longer runs unattended without `--yes`. No
   catalog declared the field before this release, so nothing that exists today
