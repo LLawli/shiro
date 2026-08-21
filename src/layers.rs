@@ -59,6 +59,18 @@ pub fn user_data_dir() -> Option<PathBuf> {
         .map(|home| PathBuf::from(home).join(".local/share"))
 }
 
+/// Where a regenerable answer may be kept. Not a layer and not state: what
+/// lives here is a cache of what a generator printed, and losing it costs one
+/// process spawn.
+pub fn user_cache_dir() -> Option<PathBuf> {
+    if let Some(xdg) = env::var_os("XDG_CACHE_HOME").filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(xdg));
+    }
+    env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .map(|home| PathBuf::from(home).join(".cache"))
+}
+
 /// Every `.toml` under a directory, sorted, so that a layer reads the same way
 /// twice regardless of what order the filesystem hands entries back.
 pub fn toml_files(dir: &std::path::Path) -> std::io::Result<Vec<PathBuf>> {

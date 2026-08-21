@@ -6,6 +6,7 @@
 //! into `crate::perms`.
 
 pub mod check;
+pub mod entries;
 pub mod env;
 pub mod hook;
 pub mod rollback;
@@ -54,12 +55,15 @@ impl Phase {
     }
 }
 
-/// What naming a node that is not a menu means.
+/// What naming a node that runs means. A list never arrives here: it lists
+/// itself, and the entry chosen out of it arrives as the action it is.
 pub fn run(node: &Node, opts: &Options) -> Result<(), Error> {
     match &node.body {
         Body::Item(item) => recipe(node, item, opts),
         Body::Action(declared) => action(node, declared, opts),
-        Body::Menu => unreachable!("a menu lists itself and never reaches the executor"),
+        Body::Menu | Body::List(_) => {
+            unreachable!("a menu lists itself and never reaches the executor")
+        }
     }
 }
 

@@ -26,6 +26,7 @@ fn shiro_at(root: &Path, args: &[&str]) -> Output {
         .args(args)
         .env("SHIRO_ROOT", root)
         .env("XDG_DATA_HOME", root.join("xdg"))
+        .env("XDG_CACHE_HOME", root.join("cache"))
         .env("SHIRO_CHECK_TIMEOUT", "1")
         .output()
         .expect("the binary runs")
@@ -198,6 +199,9 @@ fn every_schema_rule_is_enforced() {
     found("empty `app`");
     found("matches every search");
     found("no question to ask");
+    found("an action has no children");
+    found("come from its generator");
+    found("nothing to list");
     found("does not exist next to the recipe");
 }
 

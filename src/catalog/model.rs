@@ -1,5 +1,6 @@
-//! The declarations a catalog file may contain: menus, items, hooks and the
-//! `[item.permissions]` block, as the serde types they deserialize into.
+//! The declarations a catalog file may contain: menus, items, actions, lists,
+//! hooks and the `[item.permissions]` block, as the serde types they
+//! deserialize into.
 //!
 //! Format in `docs/architecture.md` section 3. Two things this file has to keep
 //! honest: `mechanism` is a label the engine never branches on, and a hook is a
@@ -10,6 +11,7 @@
 //! loses a field its author believed they had set.
 
 use std::fmt;
+use std::time::Duration;
 
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -24,6 +26,8 @@ pub struct CatalogFile {
     pub item: Vec<ItemDecl>,
     #[serde(default)]
     pub action: Vec<ActionDecl>,
+    #[serde(default)]
+    pub list: Vec<ListDecl>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +137,90 @@ pub struct ActionDecl {
 #[serde(deny_unknown_fields)]
 pub struct ActionHooks {
     pub run: Hook,
+}
+
+/// A node whose children only exist at run time: the wallpapers actually on
+/// disk, the boxes that exist, the themes installed.
+///
+/// It carries one hook, like an action, because that is what it is: an action
+/// whose subject is chosen from a generated list. The hook stays in the
+/// catalog, in the layer an administrator controls, and the generator prints
+/// identities rather than commands. A generator that printed nodes with hooks
+/// of their own would move the declaration of what runs out of the catalog,
+/// and a user-layer generator could then emit `privilege = "system"`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ListDecl {
+    pub path: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub order: Option<i64>,
+    #[serde(default)]
+    pub hidden: bool,
+    /// A label, for grouping and display. The engine never branches on it.
+    pub mechanism: Option<String>,
+    /// Declared once and carried by every entry, since one hook runs them all.
+    #[serde(default)]
+    pub privilege: Privilege,
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    pub confirm: Option<String>,
+    #[serde(default)]
+    pub destructive: bool,
+    #[serde(default)]
+    pub interactive: bool,
+    #[serde(default)]
+    pub keep_open: bool,
+    pub entries: EntriesDecl,
+    pub hooks: ActionHooks,
+}
+
+/// Where the entries come from, and how long an answer may be reused.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EntriesDecl {
+    /// A hook like any other, which is what keeps the generator subject to the
+    /// same rules about where a script may live.
+    pub command: Hook,
+    /// How long the printed answer may be served from cache. Absent means no
+    /// caching: the generator runs on every listing.
+    pub ttl: Option<Ttl>,
+}
+
+/// A duration written as a whole number and a unit.
+///
+/// Parsed here rather than validated later, so that `ttl = "5 seconds"` is
+/// refused by the parser, naming the key and the line, instead of loading and
+/// meaning nothing.
+#[derive(Debug, Clone, Copy)]
+pub struct Ttl(pub Duration);
+
+impl<'de> Deserialize<'de> for Ttl {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        duration(&raw).map(Ttl).ok_or_else(|| {
+            de::Error::custom(format!(
+                "`{raw}` is not a duration: a whole number and one of `ms`, `s`, `m`, `h`"
+            ))
+        })
+    }
+}
+
+fn duration(raw: &str) -> Option<Duration> {
+    let digits = raw.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+    let millis = match &raw[digits.len()..] {
+        "ms" => 1,
+        "s" => 1_000,
+        "m" => 60_000,
+        "h" => 3_600_000,
+        _ => return None,
+    };
+    digits
+        .parse::<u64>()
+        .ok()?
+        .checked_mul(millis)
+        .map(Duration::from_millis)
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]

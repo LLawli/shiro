@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use crate::catalog::model::{Hook, Hooks, ItemDecl, Rollback};
+use crate::catalog::model::{Hook, Hooks, ItemDecl, ListDecl, Rollback};
 use crate::catalog::{Body, Catalog, Kind, Layer, Node};
 use crate::cli::NATIVE;
 
@@ -56,6 +56,7 @@ pub fn run(catalog: &Catalog) -> Vec<Finding> {
             // declares that an action must not is absent from the declaration
             // rather than reported here.
             Body::Action(action) => script(&action.hooks.run, "run", node, &mut report),
+            Body::List(list) => generated(list, node, &mut report),
         }
     }
 
@@ -78,7 +79,29 @@ fn parent(catalog: &Catalog, node: &Node, report: &mut impl FnMut(String)) {
         Some(parent) if parent.kind() == Kind::Item => report(format!(
             "its parent `{parent_path}` is an item, and an item has no children"
         )),
+        Some(parent) if parent.kind() == Kind::Action => report(format!(
+            "its parent `{parent_path}` is an action, and an action has no children"
+        )),
+        // A list has children, and they are the ones its generator prints. A
+        // declared one is unreachable: the segment after a list names an entry,
+        // and the tree is never consulted for it.
+        Some(parent) if parent.kind() == Kind::List => report(format!(
+            "its parent `{parent_path}` is a list, whose children come from its generator, so \
+             nothing can navigate to it"
+        )),
         Some(_) => {}
+    }
+}
+
+/// A list declares two commands: the one that prints the entries and the one
+/// that runs for the chosen entry. Both are hooks, so both answer to the rules
+/// about where a script may live.
+fn generated(list: &ListDecl, node: &Node, report: &mut impl FnMut(String)) {
+    script(&list.hooks.run, "run", node, report);
+    script(&list.entries.command, "entries.command", node, report);
+
+    if matches!(&list.entries.command, Hook::Shell(body) if body.trim().is_empty()) {
+        report("`entries.command` is empty, so there is nothing to list".to_owned());
     }
 }
 

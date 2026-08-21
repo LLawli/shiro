@@ -16,7 +16,7 @@ pub const SCHEMA: u32 = 2;
 pub fn menu(listing: &Listing<'_>) -> String {
     let payload = json!({
         "schema": SCHEMA,
-        "kind": "menu",
+        "kind": listing.kind(),
         "path": listing.path(),
         "title": listing.title(),
         "children": listing.children.iter().map(child).collect::<Vec<Value>>(),

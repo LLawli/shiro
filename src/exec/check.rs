@@ -48,13 +48,15 @@ impl Status {
     }
 }
 
-/// The status of every node given, in the same order. Menus have no status and
-/// yield `None`.
+/// The status of every node given, in the same order. Only an item has a
+/// status; everything else yields `None`.
 pub fn batch(nodes: &[&Node]) -> Vec<Option<Status>> {
     let mut statuses: Vec<Option<Status>> = nodes
         .iter()
         .map(|node| match node.kind() {
-            Kind::Menu => None,
+            // A list is a place to go, like a menu, and what is behind it is
+            // not a thing that is installed either.
+            Kind::Menu | Kind::List => None,
             // An action has no presence to report on. Reporting `unknown` for
             // it would be answering a question it does not raise, which is what
             // a front end drawing "Reboot" as a missing package looks like.

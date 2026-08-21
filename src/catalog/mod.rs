@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use sha2::{Digest, Sha256};
 
-use crate::catalog::model::{ActionDecl, ItemDecl, Privilege};
+use crate::catalog::model::{ActionDecl, ItemDecl, ListDecl, Privilege};
 pub use crate::layers::Layer;
 
 /// Where a declaration came from.
@@ -34,6 +34,7 @@ pub enum Kind {
     Menu,
     Item,
     Action,
+    List,
 }
 
 impl Kind {
@@ -42,7 +43,16 @@ impl Kind {
             Kind::Menu => "menu",
             Kind::Item => "item",
             Kind::Action => "action",
+            Kind::List => "list",
         }
+    }
+
+    /// Whether naming this node means going somewhere rather than running
+    /// something. A list is navigated into like a menu; what is behind it is
+    /// generated rather than declared, which is not a difference to whoever is
+    /// walking the tree.
+    pub fn navigable(self) -> bool {
+        matches!(self, Kind::Menu | Kind::List)
     }
 }
 
@@ -61,6 +71,7 @@ pub enum Body {
     Menu,
     Item(Box<ItemDecl>),
     Action(Box<ActionDecl>),
+    List(Box<ListDecl>),
 }
 
 impl Body {
@@ -69,6 +80,7 @@ impl Body {
             Body::Menu => Kind::Menu,
             Body::Item(_) => Kind::Item,
             Body::Action(_) => Kind::Action,
+            Body::List(_) => Kind::List,
         }
     }
 }
@@ -101,6 +113,10 @@ pub struct Node {
     pub icon: Option<String>,
     pub keywords: Vec<String>,
     pub body: Body,
+    /// What a generated entry carries into `SHIRO_ENTRY`, and the mark that
+    /// this node was materialized from one rather than declared in a file. It
+    /// is `None` for every node the loader builds.
+    pub entry: Option<String>,
     pub source: Source,
     /// Declarations this one replaced, lowest layer first. Empty for a node
     /// that only one layer declares.
@@ -126,6 +142,15 @@ impl Node {
         }
     }
 
+    /// The generator and the hook it feeds, for a list, and nothing for
+    /// anything else.
+    pub fn list(&self) -> Option<&ListDecl> {
+        match &self.body {
+            Body::List(list) => Some(list),
+            _ => None,
+        }
+    }
+
     /// What describes running this node, for the two kinds that run.
     pub fn runnable(&self) -> Option<Runnable<'_>> {
         match &self.body {
@@ -146,6 +171,9 @@ impl Node {
                 interactive: action.interactive,
                 keep_open: action.keep_open,
             }),
+            // A list is a place, not a thing that runs. What it declares about
+            // running belongs to its entries, and each of them carries it.
+            Body::List(_) => None,
         }
     }
 }

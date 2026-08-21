@@ -22,6 +22,24 @@ already read: the break is in what is new, listed under each entry.
   that draws its own dialog from the `confirm` text in the listing passes
   `--yes` afterwards. ([#2])
 
+- `[[list]]`, a fourth kind of node: a menu whose children come from a command
+  the catalog declares. The generator prints entries (`id`, `title`, and
+  optionally `description`, `icon`, `keywords` and a `value`), and the list's
+  single `run` hook is what runs for the one chosen, receiving it as
+  `SHIRO_ENTRY`. It is for the half of a desktop menu that only exists at run
+  time: the wallpapers on disk, the boxes that exist, the applications
+  installed. `shiro theme pick` lists, `shiro theme pick nord` runs, and an
+  entry the generator does not offer is refused (exit 2) with what it does
+  offer. ([#2])
+- `ttl` on `[list.entries]`, which keeps what a generator printed under
+  `$XDG_CACHE_HOME/shiro/entries/` for that long, so that a front end redrawing
+  a level does not respawn the generator on every keystroke. Absent means no
+  caching. `SHIRO_LIST_CACHE=0` turns it off for one invocation, and
+  `SHIRO_LIST_TIMEOUT` overrides the five seconds a generator gets before it is
+  killed. ([#2])
+- `SHIRO_ENTRY` in a hook's environment, set for the entry chosen out of a list
+  and absent everywhere else. ([#2])
+
 - `[[action]]`, a third kind of node: one `run` hook, no `check`, no rollback,
   no removal. It is for what a desktop menu is mostly made of, which is things
   that happen rather than things that become present. In a listing it carries
@@ -32,10 +50,12 @@ already read: the break is in what is new, listed under each entry.
 
 ### Changed
 
-- `kind` in a payload can now be `"action"`, and an `action` child carries no
+- `kind` in a payload can now be `"action"` or `"list"`, and neither carries a
   `status`. A consumer that switches on `kind`, or that reads `status`
-  unconditionally, has to handle both. This is the break that makes `schema` 2.
-  ([#2])
+  unconditionally, has to handle both. `kind` at the top of a listing is now
+  `"menu"` or `"list"` for the same reason: both are navigated into the same
+  way, and a consumer that treats `menu` as somewhere to go treats `list` the
+  same. This is the break that makes `schema` 2. ([#2])
 
 - An item declaring `confirm` no longer runs unattended without `--yes`. No
   catalog declared the field before this release, so nothing that exists today

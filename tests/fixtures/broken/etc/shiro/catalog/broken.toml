@@ -87,3 +87,44 @@ title = "Missing run script"
 
 [action.hooks]
 run = { file = "gone.sh" }
+
+# A list whose generator points at a script that is not there, and which is
+# empty besides: both commands answer to the rules every hook answers to.
+[[list]]
+path  = "broken.pick"
+title = "Bad list"
+
+[list.entries]
+command = { file = "generate.sh" }
+
+[list.hooks]
+run = "true"
+
+[[list]]
+path  = "broken.pick-nothing"
+title = "Lists nothing at all"
+
+[list.entries]
+command = "   "
+
+[list.hooks]
+run = "true"
+
+# A node declared under a list, which nothing can navigate to: the segment
+# after a list names an entry, and the tree is never consulted for it.
+[[item]]
+path  = "broken.pick.one"
+title = "Child of a list"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+# A node declared under an action, which has no children either.
+[[item]]
+path  = "broken.act.one"
+title = "Child of an action"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"

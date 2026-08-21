@@ -45,6 +45,22 @@ privilege = "user"
 run = "loginctl lock-session"
 ```
 
+A node whose children only exist at run time is a `[[list]]`: a command prints
+them, and one hook runs for whichever the user picks.
+
+```toml
+[[list]]
+path  = "theme.pick"
+title = "Theme"
+
+[list.entries]
+command = "kuuhaku-themes --json"
+ttl     = "5s"
+
+[list.hooks]
+run = 'kuuhaku-theme set "$SHIRO_ENTRY"'
+```
+
 The format is specified in [../docs/architecture.md](../docs/architecture.md),
 sections 3 and 4. `shiro catalog validate` enforces it, and it is the thing to
 run before shipping a layer.

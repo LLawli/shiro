@@ -47,8 +47,10 @@ pub fn menu(listing: &Listing<'_>) -> String {
         let segment = child.node.segment();
         let status = match (child.node.kind(), child.status) {
             // A menu is not a thing that is installed or missing, it is a place
-            // to go, and the arrow is what says so.
-            (Kind::Menu, _) => "\u{203a}".to_owned(),
+            // to go, and the arrow is what says so. A list is a place too: what
+            // is behind it is generated rather than declared, which is not a
+            // difference to whoever is reading the column.
+            (Kind::Menu | Kind::List, _) => "\u{203a}".to_owned(),
             // An action is a verb. The blank column is what distinguishes it
             // from an item that declares no `check` and reports `unknown`.
             (Kind::Action, _) => String::new(),

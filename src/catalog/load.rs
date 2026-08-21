@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use crate::catalog::model::{ActionDecl, CatalogFile, ItemDecl, MenuDecl};
+use crate::catalog::model::{ActionDecl, CatalogFile, ItemDecl, ListDecl, MenuDecl};
 use crate::catalog::{Body, Catalog, Layer, LayerReport, Node, Source};
 use crate::error::Error;
 use crate::layers;
@@ -110,6 +110,9 @@ fn merge_file(
     for action in parsed.action {
         merge(node_from_action(action, source)?, source, nodes)?;
     }
+    for list in parsed.list {
+        merge(node_from_list(list, source)?, source, nodes)?;
+    }
     Ok(())
 }
 
@@ -124,6 +127,7 @@ fn node_from_menu(decl: MenuDecl, source: &Source) -> Result<Node, Error> {
         icon: decl.icon,
         keywords: decl.keywords,
         body: Body::Menu,
+        entry: None,
         source: source.clone(),
         shadowed: Vec::new(),
     })
@@ -140,6 +144,7 @@ fn node_from_item(decl: ItemDecl, source: &Source) -> Result<Node, Error> {
         icon: decl.icon.clone(),
         keywords: decl.keywords.clone(),
         body: Body::Item(Box::new(decl)),
+        entry: None,
         source: source.clone(),
         shadowed: Vec::new(),
     })
@@ -156,6 +161,24 @@ fn node_from_action(decl: ActionDecl, source: &Source) -> Result<Node, Error> {
         icon: decl.icon.clone(),
         keywords: decl.keywords.clone(),
         body: Body::Action(Box::new(decl)),
+        entry: None,
+        source: source.clone(),
+        shadowed: Vec::new(),
+    })
+}
+
+fn node_from_list(decl: ListDecl, source: &Source) -> Result<Node, Error> {
+    check_path(&decl.path, source)?;
+    Ok(Node {
+        path: decl.path.clone(),
+        title: decl.title.clone(),
+        description: decl.description.clone(),
+        order: decl.order,
+        hidden: decl.hidden,
+        icon: decl.icon.clone(),
+        keywords: decl.keywords.clone(),
+        body: Body::List(Box::new(decl)),
+        entry: None,
         source: source.clone(),
         shadowed: Vec::new(),
     })
@@ -176,24 +199,34 @@ fn check_path(path: &str, source: &Source) -> Result<(), Error> {
         return bad("it is empty");
     }
     for segment in path.split('.') {
-        if segment.is_empty() {
-            return bad("it has an empty segment");
-        }
-        if !segment
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-        {
-            return bad("a segment starts with something other than a lowercase letter or digit");
-        }
-        if !segment
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
-        {
-            return bad("a segment has a character outside [a-z0-9_-]");
+        if let Some(reason) = segment_problem(segment) {
+            return bad(reason);
         }
     }
     Ok(())
+}
+
+/// What is wrong with one segment, or `None`. Shared with the entries a
+/// generator prints, because an entry's `id` is a segment a user types: it
+/// reaches the tree through the same rule or it does not reach it at all.
+pub fn segment_problem(segment: &str) -> Option<&'static str> {
+    if segment.is_empty() {
+        return Some("it has an empty segment");
+    }
+    if !segment
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+    {
+        return Some("a segment starts with something other than a lowercase letter or digit");
+    }
+    if !segment
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+    {
+        return Some("a segment has a character outside [a-z0-9_-]");
+    }
+    None
 }
 
 /// Wholesale replacement, and a duplicate within one layer is an error: two

@@ -28,6 +28,13 @@ impl Listing<'_> {
         self.node.map(|node| node.path.as_str()).unwrap_or("")
     }
 
+    /// What is being listed. A list says so rather than passing for a menu: a
+    /// front end that caches a level should know that this one was generated,
+    /// and the root, which no catalog declares, is a menu.
+    pub fn kind(&self) -> &'static str {
+        self.node.map(|node| node.kind().as_str()).unwrap_or("menu")
+    }
+
     pub fn title(&self) -> &str {
         self.node.map(|node| node.title.as_str()).unwrap_or("shiro")
     }

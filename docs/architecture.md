@@ -143,6 +143,72 @@ declaration that sets one is refused by the parser, naming the key, rather than
 carrying a field that means nothing. That is the same mechanism that keeps
 `privilege` off a `check`: the shape of the declaration is what says so.
 
+A list is declared with `[[list]]`, and its children come from a command:
+
+```toml
+[[list]]
+path        = "theme.pick"
+title       = "Theme"
+description = "Pick among the themes installed"
+privilege   = "user"
+
+[list.entries]
+command = "kuuhaku-themes --json"
+ttl     = "5s"
+
+[list.hooks]
+run = '''kuuhaku-theme set "$SHIRO_ENTRY"'''
+```
+
+Half of a desktop menu is lists that only exist at run time: the wallpapers
+actually on disk, the boxes that exist, the Flatpak applications installed, the
+Bluetooth devices already paired. Written in a front end, they are the half of
+the tree the catalog stops describing, and the menu stops growing by editing
+TOML.
+
+**The generator prints identities, and the catalog declares what runs.** This is
+the whole shape of the feature. The generator answers "what is there", the
+`run` hook is declared beside it in the same layer, and the chosen entry reaches
+that hook as `SHIRO_ENTRY`. A generator printing nodes with hooks of their own
+would move the declaration of what runs out of the catalog and into whatever the
+command happened to print, and a generator in the user layer could then hand
+itself `privilege = "system"`.
+
+What it prints is a JSON array, one object per entry:
+
+```json
+[
+  {"id": "nord", "title": "Nord"},
+  {"id": "gruv", "title": "Gruvbox", "icon": "G", "value": "/themes/gruvbox"}
+]
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Required. What the user types, so it is a path segment and obeys the segment rule below. |
+| `title` | Required. |
+| `description`, `icon`, `keywords` | Optional, meaning exactly what they mean on a declared node. |
+| `value` | Optional. What the hook receives in `SHIRO_ENTRY`. The `id` when absent, which is the common case: a wallpaper is chosen as `foto-2024` and set by its absolute path, and neither string can do the other's job. |
+
+An unknown key, a missing `id`, an `id` that is not a segment, an `id` printed
+twice or an empty title is refused, loudly, rather than drawn. What the
+generator prints is catalog data arriving late, and it is held to the rules
+catalog data is held to.
+
+**`mechanism`, `privilege`, `confirm`, `destructive`, `interactive` and
+`keep_open` are declared once, on the list.** Every entry carries them, because
+one hook runs them all. `icon` and `keywords` on the list describe the list
+itself, the way they do for a menu; an entry's own come from the generator.
+
+**Navigating a list is navigating a menu.** `shiro theme pick` lists what the
+generator prints, and `shiro theme pick nord` runs the hook for that entry. A
+segment the generator does not offer is refused the same way a path that stops
+matching is, with what was available where it stopped. That check is what makes
+an entry a choice out of a list rather than a string handed to a hook.
+
+A list may not declare children of its own: the segment after it names an entry,
+so a declared node under it is one nothing can navigate to.
+
 **A path is segments joined by dots, and a segment is what the user types.** A
 segment matches `[a-z0-9][a-z0-9_-]*`: it is lowercase, and it never needs
 quoting, because a segment that has to be quoted is a segment nobody can type
@@ -176,12 +242,12 @@ moment a layer adds a node.
 
 | Field | Where | Meaning |
 | --- | --- | --- |
-| `icon` | menu, item, action | A Nerd Font glyph or an XDG icon name. shiro does not interpret it, and does not care which it is. |
-| `keywords` | menu, item, action | Search terms beyond the title, so that "wifi" finds "Rede". |
-| `confirm` | item, action | The question to ask before running. Its presence is what asks; its value is the wording. |
-| `destructive` | item, action | Style it as such. Not the same as `confirm`, and neither implies the other. |
-| `interactive` | item, action | The recipe needs a terminal: it prompts, or its progress is the point. |
-| `keep_open` | item, action | After running, the menu stays where it is. Right for "next wallpaper", wrong for "reboot". |
+| `icon` | every kind | A Nerd Font glyph or an XDG icon name. shiro does not interpret it, and does not care which it is. |
+| `keywords` | every kind | Search terms beyond the title, so that "wifi" finds "Rede". |
+| `confirm` | item, action, list | The question to ask before running. Its presence is what asks; its value is the wording. |
+| `destructive` | item, action, list | Style it as such. Not the same as `confirm`, and neither implies the other. |
+| `interactive` | item, action, list | The recipe needs a terminal: it prompts, or its progress is the point. |
+| `keep_open` | item, action, list | After running, the menu stays where it is. Right for "next wallpaper", wrong for "reboot". |
 
 None of them changes what the engine does, with the single exception of
 `confirm`, which is asked at a terminal (section 5). `interactive` in particular
@@ -220,6 +286,13 @@ An action has one, and it is mandatory:
 | --- | --- |
 | `run` | Does the thing. An action has one phase, so it has one hook. |
 
+A list declares two commands, and both are hooks like any other:
+
+| Hook | Role |
+| --- | --- |
+| `entries.command` | Prints the entries. |
+| `run` | Runs for the chosen entry, which arrives as `SHIRO_ENTRY`. |
+
 Schema rules the validator enforces:
 
 - an item with a `pre` that mutates must declare `roll-pre`, expressed as
@@ -236,17 +309,22 @@ Schema rules the validator enforces:
   embedded in the binary and has no directory on disk. Inline the script;
 - `[item.permissions]` names `run` or `flatpak` as its backend, and a non-empty
   `app`;
-- `keywords` holds no empty entry and `confirm`, where declared, is not empty.
+- `keywords` holds no empty entry and `confirm`, where declared, is not empty;
+- a list declares a non-empty `entries.command`, and nothing is declared as a
+  child of a list, whose children come from its generator.
 
-The rules about `{ file = ... }` apply to an action's `run` exactly as they do
-to any hook of a recipe. The rules about rollback do not apply to an action at
-all, because it declares nothing they could be about.
+The rules about `{ file = ... }` apply to an action's `run`, and to both
+commands of a list, exactly as they do to any hook of a recipe. The rules about
+rollback do not apply to an action or a list at all, because neither declares
+anything they could be about.
 
-Two rules from this section are enforced before validation and so never appear
+Three rules from this section are enforced before validation and so never appear
 as findings. A malformed path is refused by the loader. A hook carrying anything
 beyond `file` is refused by the parser, which is the only place that can name
 the stray key, and that is what keeps `privilege = "system"` off a `check`: a
-hook has no `privilege` field to set.
+hook has no `privilege` field to set. A `ttl` that is not a whole number and one
+of `ms`, `s`, `m`, `h` is refused by the parser too, naming the key and the
+line, rather than loading and meaning nothing.
 
 ### `check` is a special hook
 
@@ -268,6 +346,31 @@ Batch invocation runs the children's checks in parallel. This is not an
 optimization detail, it is the contract: 200 serial process spawns per menu
 open would defeat the reason the engine is compiled at all.
 
+### A generator is a `check` that answers with a list
+
+`entries.command` is invoked unbidden, while a menu is drawing, exactly as a
+`check` is, so the same three rules hold word for word: **no side effects, never
+elevated, always bounded.** It is given no stdin, its stderr is inherited so
+that a failure explains itself, and it runs under a timeout of five seconds,
+overridable with `SHIRO_LIST_TIMEOUT` in whole seconds. Exceeding it, failing,
+or printing something that is not the contract is an error (exit 1), not an
+empty menu: a list that quietly draws nothing is indistinguishable from a
+machine with nothing on it.
+
+The difference from a `check` is that an answer may be kept. `ttl` on
+`[list.entries]` says for how long, and its absence means the generator runs on
+every listing. What is cached is what the generator printed, under
+`$XDG_CACHE_HOME/shiro/entries/`, keyed by the node, its layer and the command
+itself, so that editing a generator asks a different question rather than
+invalidating an answer. `SHIRO_LIST_CACHE=0` turns caching off for one
+invocation; exactly `0`, and nothing else.
+
+The cache exists because the binary is spawned once per navigation step, so a
+front end redrawing a level on every keystroke would otherwise respawn the
+generator on every keystroke. It is not state in the sense of section 7: losing
+it costs one process spawn, and nothing reads it to decide anything about the
+machine.
+
 ### `uninstall` is derived when absent
 
 If a recipe declares `uninstall`, that is what runs. If it does not, the engine
@@ -283,6 +386,8 @@ removal genuinely differs from undoing a broken transaction.
 
 An action runs its `run` hook and stops. There is no gate in front of it, since
 it declares no `check`, and nothing behind it, since it declares no rollback.
+An entry chosen out of a list runs exactly like one, because that is what it is:
+the list's `run` hook, with `SHIRO_ENTRY` set.
 `--force`, `--uninstall` and `--keep-partial` are refused on an action rather
 than ignored: there is nothing for them to act on, and a flag that is silently
 dropped is a flag whose user believes it did something.
@@ -423,6 +528,7 @@ where it is:
 | `SHIRO_RECIPE_DIR` | Directory of the TOML file that declared the item, for locating sibling scripts and assets. |
 | `SHIRO_LAYER` | Which layer the item came from. |
 | `SHIRO_DRY_RUN` | `1` in the environment `--dry-run` prints, `0` when the hook runs. |
+| `SHIRO_ENTRY` | The entry chosen out of a list: its `value`, or its `id` where the generator declared none. Absent for everything else, so a hook can tell "not given one" from "given an empty one". |
 
 `SHIRO_RECIPE_DIR` is absent, rather than empty, for an item from the built-in
 layer, which has no directory on disk: `cd "$SHIRO_RECIPE_DIR"` should fail
@@ -430,7 +536,10 @@ rather than land in the current directory.
 
 `--dry-run` prints the exact command each hook would run, resolved, without
 executing it. A tool whose job is to run arbitrary scripts as root owes the
-user a way to read them first. Nothing runs under it, not even `check`.
+user a way to read them first. Nothing that changes anything runs under it, not
+even `check`. A list's generator is the exception, and it has to be: the entry a
+dry run describes is the entry the generator printed, so refusing to ask it
+would mean printing a guess about what `SHIRO_ENTRY` would hold.
 
 ## 6. Structured output
 
@@ -467,6 +576,19 @@ Listing a menu:
 
 The root is a menu like any other, and it is the one no catalog declares: it
 lists with `"path": ""` and `"title": "shiro"`.
+
+**A level says which kind it is.** `kind` at the top of a listing is `menu` or
+`list`, and a child that is a list carries `"kind": "list"`. Both are navigated
+into the same way, so a consumer that treats `menu` as somewhere to go treats
+`list` the same; what the distinction buys is knowing that the level behind it
+was generated, and that it can change between two draws without the catalog
+changing at all.
+
+**An entry is listed as an action.** It carries the path it is reached by
+(`theme.pick.nord`), `"kind": "action"`, whatever the generator said about
+presentation, and what the list declared about running. It carries no `status`,
+for the reason any action carries none, and no `value`: what the hook is given
+is between the catalog and the hook.
 
 **A field with no value is omitted, never emitted as null**, so that a
 consumer's "is it absent" and "is it empty" are the same check. A child that is
@@ -526,6 +648,11 @@ would be a copy that drifts. `check` asks the system, every time.
 
 The cost is that `check` is a process spawn per item, which is precisely why it
 is bounded, parallel, and never elevated.
+
+A list's `ttl` writes a file under `$XDG_CACHE_HOME/shiro/entries/`, and that is
+not a second copy of any truth: it is what a generator printed, kept for as long
+as the catalog said it may be reused. Deleting it costs one process spawn, and
+nothing consults it to decide whether anything is installed.
 
 ## 8. Repository layout
 

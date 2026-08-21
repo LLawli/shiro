@@ -1,0 +1,122 @@
+# Lists whose generators write to $STATE instead of looking at the machine, so
+# that a test can count invocations and read what the chosen entry was.
+
+[[menu]]
+path  = "pick"
+title = "Generated menus"
+
+# The generator records every invocation, which is how a test tells "ran once"
+# from "ran twice" and "did not run at all".
+[[list]]
+path        = "pick.themes"
+title       = "Themes"
+description = "Whatever is installed right now"
+icon        = "preferences-desktop-theme"
+keywords    = ["tema"]
+
+[list.entries]
+command = '''
+echo generated >> "$STATE/generated"
+printf '%s' '[{"id":"nord","title":"Nord"},{"id":"gruv","title":"Gruvbox","description":"Warm","icon":"G","keywords":["retro"],"value":"/themes/gruvbox"}]'
+'''
+
+[list.hooks]
+run = 'echo "chose $SHIRO_ENTRY as $SHIRO_ITEM in $SHIRO_PHASE" >> "$STATE/log"'
+
+# The same generator behind a ttl, so that a second listing is served without
+# spawning it again.
+[[list]]
+path  = "pick.cached"
+title = "Themes, remembered for a while"
+
+[list.entries]
+command = '''
+echo generated >> "$STATE/generated"
+printf '%s' '[{"id":"nord","title":"Nord"}]'
+'''
+ttl     = "1h"
+
+[list.hooks]
+run = 'echo "chose $SHIRO_ENTRY" >> "$STATE/log"'
+
+[[list]]
+path    = "pick.asks"
+title   = "Asks first"
+confirm = "Really?"
+
+[list.entries]
+command = '''printf '%s' '[{"id":"nord","title":"Nord"}]' '''
+
+[list.hooks]
+run = 'echo asked >> "$STATE/log"'
+
+[[list]]
+path  = "pick.empty"
+title = "Offers nothing"
+
+[list.entries]
+command = '''printf '%s' '[]' '''
+
+[list.hooks]
+run = 'echo nothing >> "$STATE/log"'
+
+[[list]]
+path  = "pick.slow"
+title = "Never answers"
+
+[list.entries]
+command = 'sleep 30'
+
+[list.hooks]
+run = 'true'
+
+[[list]]
+path  = "pick.failing"
+title = "Fails"
+
+[list.entries]
+command = 'echo "the generator explains itself" >&2; exit 3'
+
+[list.hooks]
+run = 'true'
+
+[[list]]
+path  = "pick.garbage"
+title = "Prints something else"
+
+[list.entries]
+command = 'printf "not json at all"'
+
+[list.hooks]
+run = 'true'
+
+[[list]]
+path  = "pick.untypable"
+title = "Prints an id nobody can type"
+
+[list.entries]
+command = '''printf '%s' '[{"id":"Nord Theme","title":"Nord"}]' '''
+
+[list.hooks]
+run = 'true'
+
+[[list]]
+path  = "pick.twice"
+title = "Prints one id twice"
+
+[list.entries]
+command = '''printf '%s' '[{"id":"nord","title":"Nord"},{"id":"nord","title":"Nord again"}]' '''
+
+[list.hooks]
+run = 'true'
+
+[[list]]
+path      = "pick.rooted"
+title     = "Runs as root"
+privilege = "system"
+
+[list.entries]
+command = '''printf '%s' '[{"id":"nord","title":"Nord"}]' '''
+
+[list.hooks]
+run = 'echo "root $SHIRO_ENTRY" >> "$STATE/log"'

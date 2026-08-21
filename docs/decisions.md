@@ -205,6 +205,69 @@ repetition is the cheaper half by a wide margin.
 The JSON is unaffected by any of this: `kind` is `"action"` there, which is what
 a front end was going to be told either way.
 
+## A generator prints entries; the hook that runs them stays in the catalog
+
+`[[list]]` declares a command that prints identities (`id`, `title`, and the
+presentation fields), and one `run` hook beside it. The chosen entry reaches
+that hook as `SHIRO_ENTRY`, and nothing else about it is generated.
+
+**Rejected: the generator prints children, hooks and all**, which is how the
+request in issue #2 was written: a command emitting the same shape shiro emits,
+spliced under the node. It is more flexible in one way that matters little,
+heterogeneous children under one node, and it moves the declaration of what runs
+out of the catalog. The property the whole design rests on is that the command
+surface is data an administrator curates in layers; a generator printing hooks
+makes it whatever the command printed on that particular run, and a generator in
+the user layer could hand itself `privilege = "system"` for a hook the machine
+layer never saw. Printing identities keeps the generator on the same footing as
+a `check`: it answers a question about the machine and decides nothing.
+
+The cost is that a list is homogeneous. Every entry runs the same hook with a
+different subject, which is exactly what "pick a theme" and "enter a box" are,
+and a node that needs two different verbs for its children is a menu with two
+lists under it.
+
+## An entry is checked against the generator before its hook runs
+
+`shiro theme pick nord` asks the generator what it offers and refuses `nord` if
+it is not there, with the same shape of message a path that stops matching gets.
+
+Passing the segment straight through would save a spawn (often not even that,
+since a `ttl` usually has the answer already) and would turn the entry into a
+string the user hands to a hook rather than a choice out of a list. The refusal
+is also the only thing that makes the front end's job and the terminal's job the
+same job: a menu can only offer what the generator printed, and the terminal now
+behaves the same way.
+
+`id` is a path segment, under the same rule as every other segment, because it
+is what a user types. `value` exists for the case where what is typed and what
+the command needs cannot be the same string: a wallpaper is chosen as
+`foto-2024` and set by an absolute path with spaces in it. Rejected: allowing an
+arbitrary `id` and quoting it. A segment that needs quoting is a segment nobody
+can type out of a menu, which is the rule the tree already keeps.
+
+## A generated answer may be cached, and that is not a state database
+
+`ttl` on `[list.entries]` keeps what the generator printed under
+`$XDG_CACHE_HOME/shiro/entries/`, keyed by the node, its layer and the command.
+
+Section 7 says shiro keeps no database of what it installed, and that still
+holds: this file holds no truth about the machine, and nothing consults it to
+decide whether something is present. It holds what one command printed, for as
+long as the catalog said it may be reused, and deleting it costs one spawn.
+
+It has to live in shiro rather than in the front end because the binary is
+spawned once per navigation step. A panel redrawing a level on every keystroke
+would respawn the generator on every keystroke, and the only place that knows
+the answer may be reused is the declaration that said so.
+
+**Rejected: no cache at all, and let the front end keep one.** Every front end
+would then implement the same expiry, and the terminal, which has no front end,
+would get none of it. Rejected too: caching by default with a built-in expiry.
+A list of Bluetooth devices and a list of installed themes go stale at rates
+that only their author knows, so the declaration carries it, and a list that
+says nothing is not cached at all.
+
 ## The main hook is named `install`, not `in`
 
 `in` was the first name and was changed before any catalog existed. It is a

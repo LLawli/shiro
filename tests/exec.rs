@@ -30,6 +30,7 @@ fn shiro_with(state: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
         .args(args)
         .env("SHIRO_ROOT", &root)
         .env("XDG_DATA_HOME", state.join("xdg"))
+        .env("XDG_CACHE_HOME", state.join("cache"))
         .env("SHIRO_CHECK_TIMEOUT", "5")
         .env("STATE", state);
     for (key, value) in env {
