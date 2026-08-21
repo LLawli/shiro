@@ -24,7 +24,7 @@ pub fn text(catalog: &Catalog) -> String {
         out.push_str(&format!(
             "{path:width$}  {kind:5}  {layer:9}  {file}{hidden}\n",
             path = node.path,
-            kind = node.kind.as_str(),
+            kind = node.kind().as_str(),
             layer = node.source.layer.as_str(),
             file = node.source.file,
             hidden = if node.hidden { " (hidden)" } else { "" },
@@ -54,7 +54,7 @@ pub fn json(catalog: &Catalog) -> String {
         .map(|node| {
             json!({
                 "path": node.path,
-                "kind": node.kind.as_str(),
+                "kind": node.kind().as_str(),
                 "layer": node.source.layer.as_str(),
                 "file": node.source.file,
                 "hidden": node.hidden,

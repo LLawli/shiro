@@ -15,7 +15,7 @@ pub fn resolve<'a>(catalog: &'a Catalog, segments: &[String]) -> Result<Option<&
 
     for segment in segments {
         if let Some(node) = current
-            && node.kind == Kind::Item
+            && node.kind() == Kind::Item
         {
             return Err(Error::Usage(format!(
                 "`{}` is an item and takes no further arguments, but got `{segment}`",

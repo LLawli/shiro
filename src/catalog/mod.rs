@@ -44,10 +44,34 @@ impl Kind {
     }
 }
 
+/// What a node is, and what it carries with it.
+///
+/// The kind is derived from this rather than stored beside it. Kept as two
+/// fields, a node whose kind says one thing and whose contents say another is
+/// representable, and every reader has to remember which of the two to trust.
+///
+/// The recipe is boxed so that a menu costs a pointer rather than the size of
+/// the largest variant. The `Option<ItemDecl>` this replaced had the same hole
+/// and nothing was there to notice it: every menu node in the tree carried an
+/// unused recipe's worth of padding through every move the map made.
+#[derive(Debug)]
+pub enum Body {
+    Menu,
+    Item(Box<ItemDecl>),
+}
+
+impl Body {
+    fn kind(&self) -> Kind {
+        match self {
+            Body::Menu => Kind::Menu,
+            Body::Item(_) => Kind::Item,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Node {
     pub path: String,
-    pub kind: Kind,
     pub title: String,
     pub description: Option<String>,
     pub order: Option<i64>,
@@ -56,8 +80,7 @@ pub struct Node {
     /// them too and a menu has no `ItemDecl` to read them from.
     pub icon: Option<String>,
     pub keywords: Vec<String>,
-    /// The recipe, for an item.
-    pub item: Option<ItemDecl>,
+    pub body: Body,
     pub source: Source,
     /// Declarations this one replaced, lowest layer first. Empty for a node
     /// that only one layer declares.
@@ -69,6 +92,18 @@ impl Node {
     /// parent.
     pub fn segment(&self) -> &str {
         self.path.rsplit('.').next().unwrap_or(&self.path)
+    }
+
+    pub fn kind(&self) -> Kind {
+        self.body.kind()
+    }
+
+    /// The recipe, for an item, and nothing for anything else.
+    pub fn item(&self) -> Option<&ItemDecl> {
+        match &self.body {
+            Body::Item(item) => Some(item),
+            _ => None,
+        }
     }
 }
 
@@ -146,7 +181,6 @@ impl Catalog {
         for (path, node) in &self.nodes {
             for field in [
                 path.as_str(),
-                node.kind.as_str(),
                 node.title.as_str(),
                 node.description.as_deref().unwrap_or(""),
                 &node
@@ -157,11 +191,9 @@ impl Catalog {
                 node.icon.as_deref().unwrap_or(""),
                 &node.keywords.join("\u{1f}"),
                 node.source.layer.as_str(),
-                &node
-                    .item
-                    .as_ref()
-                    .map(|item| format!("{item:?}"))
-                    .unwrap_or_default(),
+                // The body covers the kind as well, since its `Debug` names the
+                // variant before anything else.
+                &format!("{:?}", node.body),
             ] {
                 hasher.update(field.as_bytes());
                 hasher.update(b"\0");

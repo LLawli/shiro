@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::catalog::model::{CatalogFile, ItemDecl, MenuDecl};
-use crate::catalog::{Catalog, Kind, Layer, LayerReport, Node, Source};
+use crate::catalog::{Body, Catalog, Layer, LayerReport, Node, Source};
 use crate::error::Error;
 use crate::layers;
 
@@ -114,14 +114,13 @@ fn node_from_menu(decl: MenuDecl, source: &Source) -> Result<Node, Error> {
     check_path(&decl.path, source)?;
     Ok(Node {
         path: decl.path,
-        kind: Kind::Menu,
         title: decl.title,
         description: decl.description,
         order: decl.order,
         hidden: decl.hidden,
         icon: decl.icon,
         keywords: decl.keywords,
-        item: None,
+        body: Body::Menu,
         source: source.clone(),
         shadowed: Vec::new(),
     })
@@ -131,14 +130,13 @@ fn node_from_item(decl: ItemDecl, source: &Source) -> Result<Node, Error> {
     check_path(&decl.path, source)?;
     Ok(Node {
         path: decl.path.clone(),
-        kind: Kind::Item,
         title: decl.title.clone(),
         description: decl.description.clone(),
         order: decl.order,
         hidden: decl.hidden,
         icon: decl.icon.clone(),
         keywords: decl.keywords.clone(),
-        item: Some(decl),
+        body: Body::Item(Box::new(decl)),
         source: source.clone(),
         shadowed: Vec::new(),
     })

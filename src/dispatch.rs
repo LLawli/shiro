@@ -16,7 +16,7 @@ pub fn path(segments: &[String], opts: &Options) -> Result<(), Error> {
     let node = resolve::resolve(&catalog, segments)?;
 
     if let Some(node) = node
-        && node.kind == Kind::Item
+        && node.kind() == Kind::Item
     {
         return exec::item(node, opts);
     }

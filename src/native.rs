@@ -187,7 +187,7 @@ fn mechanisms(catalog: &Catalog) -> Vec<(String, usize)> {
     let mut counted: BTreeMap<String, usize> = BTreeMap::new();
 
     for node in catalog.iter() {
-        let Some(item) = &node.item else {
+        let Some(item) = node.item() else {
             continue;
         };
         let label = item

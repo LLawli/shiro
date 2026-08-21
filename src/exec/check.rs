@@ -53,7 +53,7 @@ impl Status {
 pub fn batch(nodes: &[&Node]) -> Vec<Option<Status>> {
     let mut statuses: Vec<Option<Status>> = nodes
         .iter()
-        .map(|node| match node.kind {
+        .map(|node| match node.kind() {
             Kind::Menu => None,
             // No `check` declared is not a failure to answer, it is the answer:
             // this item does not say how to tell.
@@ -64,11 +64,7 @@ pub fn batch(nodes: &[&Node]) -> Vec<Option<Status>> {
     let jobs: Vec<usize> = nodes
         .iter()
         .enumerate()
-        .filter(|(_, node)| {
-            node.item
-                .as_ref()
-                .is_some_and(|item| item.hooks.check.is_some())
-        })
+        .filter(|(_, node)| node.item().is_some_and(|item| item.hooks.check.is_some()))
         .map(|(index, _)| index)
         .collect();
 
@@ -116,18 +112,14 @@ fn timeout() -> Duration {
 /// One item's `check`, for the gate in front of a recipe. Same rules as the
 /// batch: bounded, never elevated, no side effects it is allowed to have.
 pub fn single(node: &Node) -> Status {
-    match node.item.as_ref().map(|item| &item.hooks.check) {
+    match node.item().map(|item| &item.hooks.check) {
         Some(Some(_)) => run(node, timeout()),
         _ => Status::Unknown,
     }
 }
 
 fn run(node: &Node, timeout: Duration) -> Status {
-    let Some(hook) = node
-        .item
-        .as_ref()
-        .and_then(|item| item.hooks.check.as_ref())
-    else {
+    let Some(hook) = node.item().and_then(|item| item.hooks.check.as_ref()) else {
         return Status::Unknown;
     };
 

@@ -45,7 +45,7 @@ pub fn menu(listing: &Listing<'_>) -> String {
     out.push('\n');
     for child in &listing.children {
         let segment = child.node.segment();
-        let status = match (child.node.kind, child.status) {
+        let status = match (child.node.kind(), child.status) {
             // A menu is not a thing that is installed or missing, it is a place
             // to go, and the arrow is what says so.
             (Kind::Menu, _) => "\u{203a}".to_owned(),

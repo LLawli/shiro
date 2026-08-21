@@ -45,7 +45,7 @@ pub fn run(catalog: &Catalog) -> Vec<Finding> {
 
         presentation(node, &mut report);
 
-        if let Some(item) = &node.item {
+        if let Some(item) = node.item() {
             recipe(item, &mut report);
             hooks(&item.hooks, node, &mut report);
             permissions(item, &mut report);
@@ -68,7 +68,7 @@ fn parent(catalog: &Catalog, node: &Node, report: &mut impl FnMut(String)) {
         None => report(format!(
             "its parent `{parent_path}` is not declared, so nothing can navigate to it"
         )),
-        Some(parent) if parent.kind == Kind::Item => report(format!(
+        Some(parent) if parent.kind() == Kind::Item => report(format!(
             "its parent `{parent_path}` is an item, and an item has no children"
         )),
         Some(_) => {}
@@ -88,7 +88,7 @@ fn presentation(node: &Node, report: &mut impl FnMut(String)) {
         report("`keywords` holds an empty entry, which matches every search".to_owned());
     }
 
-    if let Some(item) = &node.item
+    if let Some(item) = node.item()
         && item.confirm.as_ref().is_some_and(|q| q.trim().is_empty())
     {
         report("`confirm` is empty, so there is no question to ask".to_owned());

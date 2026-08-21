@@ -51,10 +51,7 @@ impl Phase {
 }
 
 pub fn item(node: &Node, opts: &Options) -> Result<(), Error> {
-    let item = node
-        .item
-        .as_ref()
-        .expect("only an item reaches the executor");
+    let item = node.item().expect("only an item reaches the executor");
     let progress = Progress::new(opts.json, node);
 
     // Decided once, before anything runs. A password prompt in the middle of a

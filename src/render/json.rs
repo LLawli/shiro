@@ -8,7 +8,6 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::catalog::Kind;
 use crate::render::{Child, Listing};
 
 /// Bumped by any change a consumer could notice, with a note in `CHANGELOG.md`.
@@ -31,7 +30,7 @@ fn child(child: &Child<'_>) -> Value {
     let mut object = Map::new();
 
     object.insert("path".into(), node.path.clone().into());
-    object.insert("kind".into(), node.kind.as_str().into());
+    object.insert("kind".into(), node.kind().as_str().into());
     object.insert("title".into(), node.title.clone().into());
     if let Some(description) = &node.description {
         object.insert("description".into(), description.clone().into());
@@ -43,9 +42,7 @@ fn child(child: &Child<'_>) -> Value {
         object.insert("keywords".into(), node.keywords.clone().into());
     }
 
-    if node.kind == Kind::Item
-        && let Some(item) = &node.item
-    {
+    if let Some(item) = node.item() {
         if let Some(mechanism) = &item.mechanism {
             object.insert("mechanism".into(), mechanism.clone().into());
         }
