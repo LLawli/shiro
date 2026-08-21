@@ -190,7 +190,27 @@ shiro run brave              # launch it under that profile
 ```
 
 `shiro perms` always names its backend, so what is being changed is never
-inferred. `shiro run` launches native applications under bwrap according to a
+inferred.
+
+**On the Flatpak side, `apply` denies by default**: it emits every class
+flatpak has, denied by name, and then what the profile allows, so the profile
+is the whole of what the application may do rather than a list of exceptions on
+top of whatever its manifest asks for this month. An update that starts asking
+for the session bus does not get it. Three things can never be granted, in a
+profile or at the terminal: `bus=org.freedesktop.Flatpak`, which is
+`flatpak-spawn --host`; the bus sockets unfiltered; and any path inside a
+flatpak installation, which is where the override files live.
+
+```toml
+# a Flatpak profile under deny by default: what the application needs, named
+backend = "flatpak"
+app     = "com.brave.Browser"
+
+[flatpak]
+allow = ["socket=wayland", "device=dri", "filesystem=xdg-download"]
+```
+
+`shiro run` launches native applications under bwrap according to a
 declared profile, and an application with no profile runs under a fallback that
 grants close to nothing, loudly: every namespace unshared, `/usr` and `/etc`
 read only, a tmpfs over the home directory, an emptied environment. It never

@@ -1,0 +1,9 @@
+# A profile asking for the one thing no profile may have: the bus name that
+# runs commands outside the sandbox. `apply` refuses it rather than applying
+# the rest, because a sandbox with a hole in it is not most of a sandbox.
+
+backend = "flatpak"
+app     = "com.example.Escape"
+
+[flatpak]
+allow = ["socket=wayland", "bus=org.freedesktop.Flatpak"]

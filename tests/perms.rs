@@ -301,6 +301,201 @@ fn skip(why: &str) -> bool {
     false
 }
 
+/// A flatpak that records what it was asked to do instead of doing it. Every
+/// test that reaches the backend goes through one: a test suite that wrote real
+/// overrides would confine the machine running it.
+fn fake_flatpak(name: &str) -> (PathBuf, PathBuf) {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("the scratch directory is writable");
+
+    let fake = dir.join("flatpak");
+    fs::write(
+        &fake,
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FLATPAK_LOG\"\n",
+    )
+    .expect("the fake is writable");
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).expect("chmod");
+
+    let log = dir.join("invocations");
+    (dir, log)
+}
+
+fn perms(dir: &Path, log: &Path, args: &[&str]) -> Output {
+    let root = root();
+    Command::new(env!("CARGO_BIN_EXE_shiro"))
+        .args(args)
+        .env("PATH", format!("{}:/usr/bin:/bin", dir.display()))
+        .env("FLATPAK_LOG", log)
+        .env("SHIRO_ROOT", &root)
+        .env("XDG_DATA_HOME", root.join("xdg"))
+        .output()
+        .expect("the binary runs")
+}
+
+fn recorded(log: &Path) -> String {
+    fs::read_to_string(log).unwrap_or_default()
+}
+
+#[test]
+fn apply_denies_every_class_before_it_grants_anything() {
+    // The point of the whole thing: a manifest that starts asking for the
+    // session bus, a device or a directory in its next release gets it from
+    // flatpak by default, and an override file listing only what one profile
+    // took away grants whatever the next manifest adds.
+    let (dir, log) = fake_flatpak("fake-flatpak-baseline");
+    let out = perms(
+        &dir,
+        &log,
+        &["perms", "flatpak", "com.brave.Browser", "apply"],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let args = recorded(&log);
+
+    for share in ["network", "ipc"] {
+        assert!(args.contains(&format!("--unshare={share}")), "{args}");
+    }
+    // Every socket by name, because there is no flag that denies the class.
+    for socket in [
+        "x11",
+        "wayland",
+        "fallback-x11",
+        "pulseaudio",
+        "system-bus",
+        "session-bus",
+        "ssh-auth",
+        "pcsc",
+        "cups",
+        "gpg-agent",
+        "inherit-wayland-socket",
+    ] {
+        assert!(args.contains(&format!("--nosocket={socket}")), "{args}");
+    }
+    // `all` is a device like the others, and denying it does not deny them.
+    for device in ["dri", "input", "usb", "kvm", "shm", "all"] {
+        assert!(args.contains(&format!("--nodevice={device}")), "{args}");
+    }
+    for feature in ["devel", "multiarch", "bluetooth"] {
+        assert!(args.contains(&format!("--disallow={feature}")), "{args}");
+    }
+
+    // The one class that does not need enumerating: flatpak documents
+    // `host:reset` as ignoring every filesystem permission inherited from the
+    // manifest and from the override file.
+    assert!(args.contains("--nofilesystem=host:reset"), "{args}");
+    for path in ["~/.local/share/flatpak", "/var/lib/flatpak", "~/.var/app"] {
+        assert!(args.contains(&format!("--nofilesystem={path}")), "{args}");
+    }
+    assert!(
+        args.contains("--no-talk-name=org.freedesktop.Flatpak"),
+        "{args}"
+    );
+
+    // What the profile asked for survives, because the last mention of a key
+    // wins and the baseline is emitted first. The reverse order would deny
+    // exactly what the profile exists to grant.
+    assert!(
+        args.find("--nosocket=wayland") < args.find(" --socket=wayland"),
+        "the baseline has to come first: {args}"
+    );
+    assert!(
+        args.find("--nodevice=dri") < args.find(" --device=dri"),
+        "the baseline has to come first: {args}"
+    );
+    assert!(args.contains("--filesystem=xdg-download"), "{args}");
+}
+
+#[test]
+fn what_would_undo_the_sandbox_cannot_be_granted() {
+    let (dir, log) = fake_flatpak("fake-flatpak-sealed");
+
+    // Named in a profile, `apply` refuses the whole thing rather than applying
+    // the rest: a sandbox with a hole in it is not most of a sandbox.
+    let out = perms(
+        &dir,
+        &log,
+        &["perms", "flatpak", "com.example.Escape", "apply"],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", stdout(&out));
+    assert!(
+        stderr(&out).contains("flatpak-spawn --host"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(
+        recorded(&log).is_empty(),
+        "nothing may reach flatpak: {}",
+        recorded(&log)
+    );
+
+    // And typed at the terminal, one at a time.
+    for (perm, needle) in [
+        ("bus=org.freedesktop.Flatpak", "outside the sandbox"),
+        ("socket=session-bus", "unfiltered"),
+        ("socket=system-bus", "run as root"),
+        (
+            "filesystem=~/.local/share/flatpak/overrides",
+            "rewrite its own permissions",
+        ),
+        ("filesystem=/var/lib/flatpak", "rewrite its own permissions"),
+    ] {
+        let out = perms(
+            &dir,
+            &log,
+            &["perms", "flatpak", "com.brave.Browser", "allow", perm],
+        );
+        assert_eq!(out.status.code(), Some(2), "{perm} was granted");
+        assert!(stderr(&out).contains(needle), "{perm}: {}", stderr(&out));
+    }
+
+    assert!(recorded(&log).is_empty(), "nothing may reach flatpak");
+
+    // Denying one is the safe direction, and stays available.
+    let out = perms(
+        &dir,
+        &log,
+        &[
+            "perms",
+            "flatpak",
+            "com.brave.Browser",
+            "deny",
+            "bus=org.freedesktop.Flatpak",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        recorded(&log).contains("--no-talk-name=org.freedesktop.Flatpak"),
+        "{}",
+        recorded(&log)
+    );
+}
+
+#[test]
+fn a_value_flatpak_does_not_have_is_refused_with_the_list() {
+    // The lists are closed because the baseline is built from them: a value
+    // shiro does not know is a value it never denied, so accepting one would
+    // grant something the deny-by-default had no name for.
+    let (dir, log) = fake_flatpak("fake-flatpak-closed");
+
+    let out = perms(
+        &dir,
+        &log,
+        &[
+            "perms",
+            "flatpak",
+            "com.brave.Browser",
+            "allow",
+            "socket=telepathy",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    let message = stderr(&out);
+    assert!(message.contains("is not a socket flatpak has"), "{message}");
+    assert!(message.contains("wayland"), "{message}");
+    assert!(recorded(&log).is_empty(), "nothing may reach flatpak");
+}
+
 #[test]
 fn apply_issues_a_single_override_invocation() {
     // `flatpak override` merges into a file it keeps, so a deny that resets

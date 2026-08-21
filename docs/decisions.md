@@ -493,6 +493,88 @@ that sentence. The vocabulary is small and closed, and `shiro perms run <app>`
 prints both the summary and the resulting invocation, so the translation is
 checkable rather than trusted.
 
+## `perms flatpak apply` denies every class first, then grants the profile
+
+`apply` emits `--unshare`, `--nosocket`, `--nodevice`, `--disallow` for every
+value flatpak documents, plus `--nofilesystem=host:reset`, and only then what
+the profile allows.
+
+The reason is that a manifest is not a promise. Permissions in flatpak default
+to what the application asks for, and an application asks again on every
+update: the release that wanted a screen and a download directory wants the
+session bus two months later, and an override file that lists only what a
+profile took away in 2026 silently grants whatever 2027 adds. Under
+deny-by-default the profile is the whole of what the application may do, and an
+update that wants more has to be answered by editing the profile, which is a
+file somebody reads.
+
+The cost is real and is paid at the profile: an application now gets nothing it
+did not ask for by name, `socket=wayland` included, so a profile that used to
+be a short list of exceptions becomes a description of what the application
+needs. That is the trade being made deliberately. A profile that grants nothing
+produces an application that does not start, which is a visible failure, and
+the alternative failure is invisible.
+
+**Rejected: keeping the old shape and auditing manifests.** It puts the burden
+where nobody looks, on noticing that an update changed its `Context` section.
+**Rejected: a `sealed = false` escape on the profile**, for the application that
+"needs everything": it is the flag every recipe copies, and a deny-by-default
+with a documented way to turn it off is a deny-by-default nobody can rely on.
+
+The order inside the invocation matters and is tested: the last mention of a
+key wins, so `--nodevice=dri --device=dri` grants dri and the reverse denies it.
+The baseline is emitted first for that reason, not for readability.
+
+The closed value lists (11 sockets, 6 devices, 3 features) are what the baseline
+is built from, which is why a value shiro does not know is refused rather than
+forwarded: an unknown value is one the baseline never denied, so accepting it
+would grant something that had no name in the deny.
+
+## D-Bus is denied by socket, not by name
+
+`apply` emits `--nosocket=session-bus` and `--nosocket=system-bus`, plus a short
+list of names, and does not attempt to deny names in general.
+
+It cannot: flatpak refuses `--no-talk-name=*` outright (`Invalid dbus name *`),
+and prefixes broad enough to matter take the portals with them, since
+`org.freedesktop.portal.*` is how a confined application opens a file. It also
+does not need to. With the socket denied, flatpak proxies the bus instead of
+handing it over, and the default policy already limits the application to its
+own name, `org.freedesktop.DBus` and the portals. That is deny-by-default
+already, written by flatpak.
+
+What the short list adds is the names that would be granted by a manifest and
+that are equivalent to leaving the sandbox: `org.freedesktop.Flatpak`, which is
+`flatpak-spawn --host`, and `org.freedesktop.impl.portal.PermissionStore`,
+which is where the portals keep their answers.
+
+## What would undo a sandbox cannot be granted, and there is no flag for it
+
+`bus=org.freedesktop.Flatpak`, the two bus sockets, and any `filesystem=` inside
+a flatpak installation are refused wherever they are declared: in a profile, in
+a recipe's `[item.permissions]`, and typed at the terminal. `apply` refuses the
+whole profile rather than applying the rest of it.
+
+Each grants the thing that lets an application undo its own confinement, which
+makes granting it indistinguishable from not confining the application. A
+sandbox with a hole in it is not most of a sandbox.
+
+`filesystem=home` and `filesystem=host` are deliberately **not** on that list,
+though both contain the override directory. A profile that cannot express what
+a browser needs is a profile people route around, by editing the `.desktop`
+file, and that removes the sandbox rather than loosening it. The denial of the
+installation directories is emitted next to them as depth: how flatpak resolves
+a narrow deny against a wide allow is flatpak's rule, and shiro does not claim
+to have made `filesystem=home` safe.
+
+**Not enforced by `catalog validate`**, though a recipe's `[item.permissions]`
+can declare one. The validator would have to call into `src/perms/`, and that
+module survives as an exception only while it stays sealed: reachable from its
+own native commands and from the engine recording a declaration, and from
+nowhere else. The refusal happens at `apply`, which is the recipe's `post`, so
+it fails loudly inside the transaction that declared it and the rollback undoes
+the rest.
+
 ## `perms flatpak apply` emits one invocation, and knows nothing about `:reset`
 
 Applying a profile builds a single `flatpak override` command carrying the

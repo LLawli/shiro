@@ -701,17 +701,75 @@ feature.
 | `shiro perms run <app>` | Print the profile in effect and the exact bwrap invocation `shiro run` would use. |
 
 `--system` acts on the system-wide override instead of the user's. Permissions
-are written in flatpak's own vocabulary, and the list is closed: `network`,
-`ipc`, `filesystem=<path>`, `device=<name>`, `bus=<name>`. A word outside it is
-refused with the list rather than forwarded, because a tool that passes through
-strings it does not understand cannot be audited either. Every invocation prints
-the `flatpak` command it is about to run.
+are written in flatpak's own vocabulary, and the list is closed:
 
-**`apply` emits one invocation carrying both sides**, never one per side.
+| Word | Flag |
+| --- | --- |
+| `network`, `ipc` | `--share` / `--unshare` |
+| `socket=<name>` | `--socket` / `--nosocket` |
+| `device=<name>` | `--device` / `--nodevice` |
+| `feature=<name>` | `--allow` / `--disallow` |
+| `filesystem=<path>` | `--filesystem` / `--nofilesystem` |
+| `bus=<name>` | `--talk-name` / `--no-talk-name` |
+
+The values are closed too, against what flatpak documents: sockets are `x11`,
+`wayland`, `fallback-x11`, `pulseaudio`, `system-bus`, `session-bus`,
+`ssh-auth`, `pcsc`, `cups`, `gpg-agent`, `inherit-wayland-socket`; devices are
+`dri`, `input`, `usb`, `kvm`, `shm`, `all`; features are `devel`, `multiarch`,
+`bluetooth`. A word or a value outside the lists is refused with the list rather
+than forwarded, because a tool that passes through strings it does not
+understand cannot be audited, and because the lists are what the deny below is
+built from. Every invocation prints the `flatpak` command it is about to run.
+
+**`apply` denies by default.** It emits every class flatpak has, denied by
+name, and then what the profile allows. A manifest is not a promise: the
+application that asked for a screen and a download directory in one release
+asks for the session bus in the next, and an override file that lists only what
+one profile took away grants whatever the next manifest adds. The profile is
+therefore the whole of what the application may do, rather than a diff against
+whatever it currently asks for.
+
+The order inside the invocation is not cosmetic: the last mention of a key
+wins, so the baseline is emitted first and the profile's allows come after.
+`--nodevice=dri --device=dri` grants dri, and the reverse denies it.
+
+The filesystem is the one class that does not need enumerating.
+`--nofilesystem=host:reset` is documented as ignoring every filesystem
+permission inherited from the manifest and from the override file, which is
+exactly the deny-by-default the other classes have to spell out value by value.
+
+**The session bus is not denied name by name, and does not need to be.** With
+`--nosocket=session-bus`, flatpak proxies the bus rather than handing it over,
+and its default policy already limits an application to its own name,
+`org.freedesktop.DBus` and `org.freedesktop.portal.*`. Denying every name is
+not expressible anyway: flatpak refuses `--no-talk-name=*`, and denying a
+prefix broadly enough to matter (`org.freedesktop.*`) takes the portals with
+it, which is how a confined application opens a file at all.
+
+**Three things can never be granted**, in a profile or at the terminal, and are
+denied on every `apply`:
+
+| Refused | Why |
+| --- | --- |
+| `bus=org.freedesktop.Flatpak` | It is `flatpak-spawn --host`: arbitrary execution outside the sandbox. |
+| `socket=session-bus`, `socket=system-bus` | The bus unfiltered, which is every name on it at once, including the one above. |
+| `filesystem=` anything inside a flatpak installation | `~/.local/share/flatpak`, `/var/lib/flatpak`: the override files themselves, so the application could rewrite its own permissions. |
+
+There is deliberately no escape hatch for these, because a flag that turns the
+list off is the flag every recipe would copy. `apply` also denies `~/.var/app`,
+which is every other application's data.
+
+What this does not do is make `filesystem=home` or `filesystem=host` safe. Both
+reach the override directory by containing it, and both stay declarable,
+because a profile that cannot express what a browser needs is a profile people
+work around. The denial of the installation directories is emitted alongside
+them as depth, not as a guarantee: how flatpak resolves a narrow deny against a
+wide allow is flatpak's rule, not shiro's.
+
+**`apply` emits one invocation carrying every side**, never one per side.
 `flatpak override` merges into a file it keeps, and a deny that resets
 (`filesystem=host:reset`) drops what is already in that file, so a second
-invocation discards what the first one wrote. Within one invocation flatpak
-resolves the whole set, in either order.
+invocation discards what the first one wrote.
 
 `shiro perms run <app>` is the audit surface for the bwrap side, which has no
 `--show` of its own: it prints what the profile grants and the invocation that

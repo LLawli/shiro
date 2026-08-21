@@ -4,6 +4,46 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
+## Unreleased
+
+### Changed
+
+- **`shiro perms flatpak <app> apply` now denies by default.** It emits every
+  class flatpak has, denied by name (`--unshare`, `--nosocket`, `--nodevice`,
+  `--disallow`, and `--nofilesystem=host:reset`), and then what the profile
+  allows. A profile is now the whole of what an application may do, rather than
+  a list of exceptions on top of whatever its manifest currently asks for, so
+  an update that starts asking for the session bus does not get it.
+
+  **Every existing flatpak profile has to be reread before this is applied.**
+  An application gets nothing it does not name: `socket=wayland` included,
+  without which it has no window. What used to be a short deny list is now a
+  description of what the application needs.
+
+- What would undo a sandbox can no longer be granted, in a profile or at the
+  terminal: `bus=org.freedesktop.Flatpak` (`flatpak-spawn --host`),
+  `socket=session-bus` and `socket=system-bus` (the bus unfiltered), and any
+  `filesystem=` inside a flatpak installation (`~/.local/share/flatpak`,
+  `/var/lib/flatpak`), which is where the override files are. `apply` refuses
+  the whole profile rather than applying the rest of it, and there is no flag
+  that turns this off. Denying one of them is unaffected: that is the safe
+  direction.
+
+- `device=` and the other valued words are now checked against flatpak's own
+  lists rather than forwarded. `device=gpu` is refused with the list instead of
+  reaching flatpak.
+
+- A `[flatpak]` profile may now declare an empty `allow`, which means what it
+  says: nothing beyond the baseline. What is refused instead is a profile with
+  no `[flatpak]` section at all.
+
+### Added
+
+- `socket=<name>` and `feature=<name>` in the permission vocabulary, for
+  `--socket`/`--nosocket` and `--allow`/`--disallow`. Under deny by default a
+  profile has to be able to name the sockets an application needs, and there
+  was no word for them.
+
 ## 0.2.0 (2026-08-21)
 
 `schema` is **2**. A consumer written against 1 keeps working for everything it

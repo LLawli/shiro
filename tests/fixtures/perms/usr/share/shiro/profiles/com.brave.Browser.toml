@@ -3,8 +3,14 @@
 backend = "flatpak"
 app     = "com.brave.Browser"
 
-# A resetting deny next to an allow: the shape that broke when `apply` issued
-# one invocation per side.
+# Under deny by default, a profile has to name what the application needs to
+# work at all: without `socket=wayland` there is no window. That is the trade,
+# and it is why the list reads like what the application actually needs rather
+# than like a diff against whatever its manifest asked for this month.
 [flatpak]
-allow = ["filesystem=xdg-download", "device=dri"]
-deny  = ["filesystem=host:reset", "filesystem=home", "bus=org.freedesktop.Flatpak"]
+allow = ["filesystem=xdg-download", "device=dri", "socket=wayland"]
+
+# A resetting deny next to an allow: the shape that broke when `apply` issued
+# one invocation per side. Redundant now that everything is denied first, and
+# kept because a profile is also a document of what its author meant.
+deny = ["filesystem=host:reset", "filesystem=home", "bus=org.freedesktop.Flatpak"]

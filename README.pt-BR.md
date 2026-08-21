@@ -193,7 +193,27 @@ shiro run brave              # lança o app sob esse perfil
 ```
 
 O `shiro perms` sempre nomeia o backend, então nunca se infere o que está sendo
-alterado. O `shiro run` lança aplicações nativas sob bwrap conforme um perfil
+alterado.
+
+**No lado do Flatpak, o `apply` nega por padrão**: ele emite todas as classes
+que o flatpak tem, negadas uma a uma, e só então o que o perfil libera. O perfil
+passa a ser tudo o que o app pode fazer, em vez de uma lista de exceções em
+cima do que o manifesto pede neste mês. Uma atualização que começa a pedir o
+barramento de sessão não o recebe. Três coisas nunca podem ser concedidas, nem
+num perfil nem no terminal: `bus=org.freedesktop.Flatpak`, que é o
+`flatpak-spawn --host`; os sockets de barramento sem filtro; e qualquer caminho
+dentro de uma instalação do flatpak, que é onde ficam os arquivos de override.
+
+```toml
+# um perfil Flatpak sob deny por padrão: o que o app precisa, nomeado
+backend = "flatpak"
+app     = "com.brave.Browser"
+
+[flatpak]
+allow = ["socket=wayland", "device=dri", "filesystem=xdg-download"]
+```
+
+O `shiro run` lança aplicações nativas sob bwrap conforme um perfil
 declarado, e um app sem perfil roda num fallback que não concede quase nada, de
 forma barulhenta: todos os namespaces separados, `/usr` e `/etc` somente
 leitura, um tmpfs sobre o diretório home, o ambiente esvaziado. Ele nunca roda
