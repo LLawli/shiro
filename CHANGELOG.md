@@ -4,7 +4,7 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
-## Unreleased
+## 0.2.0 (2026-08-21)
 
 `schema` is **2**. A consumer written against 1 keeps working for everything it
 already read: the break is in what is new, listed under each entry.
