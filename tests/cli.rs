@@ -200,9 +200,64 @@ fn every_schema_rule_is_enforced() {
     found("matches every search");
     found("no question to ask");
     found("an action has no children");
+    // The permission vocabulary, which `apply` would refuse in the recipe's
+    // `post`, on the machine of whoever installed.
+    found("is not a device flatpak has");
+    found("cannot be granted");
+    found("which nothing will read");
+    found("not a profile the registry could write");
     found("come from its generator");
     found("nothing to list");
     found("does not exist next to the recipe");
+}
+
+#[test]
+fn a_recipe_is_held_to_the_permission_words_apply_is_held_to() {
+    // The check existed and only ran at `apply`, which is the recipe's `post`,
+    // on the machine of whoever installed. Under `rollback = "atomic"` that
+    // failure takes the installation with it, and every gate before it, an
+    // image build validating its whole catalog included, reported success.
+    let out = shiro("broken", &["catalog", "validate", "--json"]);
+    assert_eq!(out.status.code(), Some(1));
+
+    let payload = json(&out);
+    let about = |path: &str| -> Vec<String> {
+        payload["findings"]
+            .as_array()
+            .expect("findings is a list")
+            .iter()
+            .filter(|finding| finding["path"] == path)
+            .map(|finding| finding["message"].as_str().expect("a message").to_owned())
+            .collect()
+    };
+
+    let vocabulary = about("broken.bad-vocabulary");
+    assert_eq!(vocabulary.len(), 2, "{vocabulary:#?}");
+    // A value flatpak does not have, reported with the list, exactly as the
+    // terminal reports it.
+    assert!(
+        vocabulary.iter().any(
+            |finding| finding.contains("`gpu` is not a device flatpak has")
+                && finding.contains("dri, input, usb")
+        ),
+        "{vocabulary:#?}"
+    );
+    // And the one that can never be granted, wherever it is declared.
+    assert!(
+        vocabulary
+            .iter()
+            .any(|finding| finding.contains("flatpak-spawn --host")),
+        "{vocabulary:#?}"
+    );
+
+    // A backend that does not exist stops the rest: nothing below it can be
+    // read without knowing which shape the declaration is.
+    let backend = about("broken.bad-permissions");
+    assert_eq!(backend.len(), 1, "{backend:#?}");
+    assert!(
+        backend[0].contains("it is `run` or `flatpak`"),
+        "{backend:#?}"
+    );
 }
 
 #[test]

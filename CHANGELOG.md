@@ -4,6 +4,25 @@ What changed, and what a consumer has to do about it. The `--json` payload
 carries a `schema` field, and any change a consumer could notice is recorded
 here with the version that made it.
 
+## Unreleased
+
+### Fixed
+
+- `shiro catalog validate` now holds a recipe's `[item.permissions]` to the same
+  words `apply` holds it to: the permission itself, its value against the
+  socket, device and feature lists, and the three that can never be granted. It
+  also reports a declaration that could not be written as a profile at all (a
+  misspelled key) and one carrying the block of the other backend. Previously
+  all of it validated, and the first check happened at `apply`, which runs in
+  the recipe's `post` on the machine of whoever installed: under `rollback =
+  "atomic"` a mistyped permission was an application that installed and then
+  disappeared, with every gate before it reporting success. ([#4])
+
+  Nothing new is enforced, so a catalog that installs cleanly today keeps
+  validating. What changes is when it finds out.
+
+[#4]: https://github.com/LLawli/shiro/issues/4
+
 ## 0.3.0 (2026-08-21)
 
 ### Changed

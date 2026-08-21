@@ -47,7 +47,8 @@ check        = { file = "nowhere.sh" }
 install      = { file = "../escape.sh" }
 roll-install = "true"
 
-# A backend that does not exist, and an empty application name.
+# A backend that does not exist. Nothing else about the declaration is reported,
+# because nothing else can be read without knowing which shape it is.
 [[item]]
 path  = "broken.bad-permissions"
 title = "Bad permissions"
@@ -59,6 +60,71 @@ roll-install = "true"
 [item.permissions]
 backend = "podman"
 app     = "   "
+
+# An empty application name, which names no profile file.
+[[item]]
+path  = "broken.nameless-permissions"
+title = "Permissions for nobody"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[item.permissions]
+backend = "flatpak"
+app     = "  "
+
+# A profile in the permission vocabulary, holding a value flatpak does not have
+# and one of the three that can never be granted. `apply` refuses both, and it
+# runs in this recipe's `post`, on the machine of whoever installed.
+[[item]]
+path  = "broken.bad-vocabulary"
+title = "Permissions that apply would refuse"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[item.permissions]
+backend = "flatpak"
+app     = "com.example.Broken"
+
+[item.permissions.flatpak]
+allow = ["device=gpu", "bus=org.freedesktop.Flatpak"]
+
+# A declaration whose block belongs to the other backend, so the half its author
+# wrote is the half nothing reads.
+[[item]]
+path  = "broken.wrong-block"
+title = "The other backend's block"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[item.permissions]
+backend = "run"
+app     = "broken-app"
+
+[item.permissions.flatpak]
+allow = ["socket=wayland"]
+
+# A misspelled key, which the profile the registry would write cannot hold.
+[[item]]
+path  = "broken.misspelled-permission"
+title = "Misspelled permission key"
+
+[item.hooks]
+install      = "true"
+roll-install = "true"
+
+[item.permissions]
+backend = "run"
+app     = "broken-typo"
+
+[item.permissions.run]
+command = "/usr/bin/true"
+shate   = ["wayland"]
 
 # An item declared as a child of an item.
 [[item]]

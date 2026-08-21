@@ -205,6 +205,17 @@ fn translate_all(perms: &[String], allow: bool) -> Result<Vec<String>, Error> {
     perms.iter().map(|perm| translate(perm, allow)).collect()
 }
 
+/// Whether a permission word could be granted or revoked, without granting or
+/// revoking anything.
+///
+/// This is what lets `catalog validate` hold a recipe's `[item.permissions]` to
+/// the same closed lists `apply` holds it to, without the validator learning
+/// what a socket is. The answer comes from the one translation table, so the
+/// two cannot drift: there is nothing to keep in step.
+pub fn check(perm: &str, allow: bool) -> Result<(), Error> {
+    translate(perm, allow).map(|_| ())
+}
+
 fn invoke(app: &str, system: bool, flags: Vec<String>) -> Result<(), Error> {
     let mut args = vec!["override".to_owned(), scope(system).to_owned()];
     args.extend(flags);

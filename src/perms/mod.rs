@@ -4,11 +4,18 @@
 //! Section 9 of `docs/architecture.md`, and the second rule in `CLAUDE.md`. The
 //! exception survives only while the module stays sealed:
 //!
-//! 1. it is reachable from exactly two places, its own native commands and the
-//!    engine recording an `[item.permissions]` declaration into the registry;
+//! 1. it is reachable from exactly three places, its own native commands, the
+//!    engine recording an `[item.permissions]` declaration into the registry,
+//!    and `catalog validate` asking whether such a declaration holds together;
 //! 2. `crate::exec` never calls into it, except for that recording;
 //! 3. recording a declaration is a data write and nothing more: no bwrap, no
 //!    flatpak, no wrapper script, no `.desktop` file.
+//!
+//! The third caller is the newest and is the one to keep honest. It asks a
+//! question and receives sentences: the validator never learns what a socket
+//! is, what flatpak is, or that either exists. Were it to import the closed
+//! lists instead, the vocabulary would live in two places and the copy in the
+//! engine would be the one nobody updates.
 
 pub mod bwrap;
 pub mod flatpak;
@@ -20,9 +27,99 @@ use std::process::Command;
 
 use serde_json::json;
 
+use crate::catalog::model::PermissionsDecl;
 use crate::error::Error;
-use crate::perms::profile::Backend;
+use crate::perms::profile::{Backend, Profile};
 use crate::render::json::SCHEMA;
+
+/// What is wrong with a recipe's `[item.permissions]`, as sentences a report
+/// can print. Empty when there is nothing wrong with it.
+///
+/// This exists because the alternative place to find out is `apply`, which runs
+/// inside the recipe's `post`, on the machine of whoever installed. Under
+/// `rollback = "atomic"` a failing `post` takes the installation with it, so a
+/// mistyped permission costs a user an application that installs and then
+/// disappears, and every gate before that reported success.
+///
+/// The declaration is read as the profile file it would become, which is what
+/// the registry writes, so a declaration that validates is one the registry can
+/// write and `shiro run` can read back.
+pub fn findings(decl: &PermissionsDecl) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    if !matches!(decl.backend.as_str(), "run" | "flatpak") {
+        // Nothing below can be read without knowing which shape it is, so this
+        // is the one finding that stops the rest.
+        return vec![format!(
+            "`[item.permissions]` names the backend `{}`; it is `run` or `flatpak`",
+            decl.backend
+        )];
+    }
+
+    if decl.app.trim().is_empty() {
+        findings.push("`[item.permissions]` declares an empty `app`".to_owned());
+    }
+
+    let profile: Profile = match toml::Value::Table(registry::table(decl)).try_into() {
+        Ok(profile) => profile,
+        Err(err) => {
+            findings.push(format!(
+                "`[item.permissions]` is not a profile the registry could write: {}",
+                flatten(&err.to_string())
+            ));
+            return findings;
+        }
+    };
+
+    // A `run` profile carrying a `[flatpak]` block, or the reverse, is a
+    // declaration whose author expected the half that will be ignored to be the
+    // half that acts.
+    match profile.backend {
+        Backend::Run if profile.flatpak.is_some() => findings.push(
+            "`[item.permissions]` declares the `run` backend and a `[flatpak]` block, \
+             which nothing will read"
+                .to_owned(),
+        ),
+        Backend::Flatpak if profile.run.is_some() => findings.push(
+            "`[item.permissions]` declares the `flatpak` backend and a `[run]` block, \
+             which nothing will read"
+                .to_owned(),
+        ),
+        _ => {}
+    }
+
+    if let Some(flatpak) = &profile.flatpak {
+        let words = flatpak
+            .allow
+            .iter()
+            .map(|perm| (perm, true))
+            .chain(flatpak.deny.iter().map(|perm| (perm, false)));
+
+        for (perm, allow) in words {
+            let side = if allow { "allow" } else { "deny" };
+            if let Err(err) = flatpak::check(perm, allow) {
+                findings.push(format!(
+                    "`[item.permissions.flatpak]` {side}: {}",
+                    flatten(&err.to_string())
+                ));
+            }
+        }
+    }
+
+    findings
+}
+
+/// A finding is one line in a report, and the errors these come from are
+/// written for a terminal, where a second line can carry the list of what was
+/// expected. Keeping that list is worth more than keeping the shape.
+fn flatten(message: &str) -> String {
+    message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 
 /// `shiro perms <backend> …`, where the backend is always named in the command
 /// and never inferred from the application. The verbosity is the feature: a

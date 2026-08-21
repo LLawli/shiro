@@ -567,13 +567,27 @@ installation directories is emitted next to them as depth: how flatpak resolves
 a narrow deny against a wide allow is flatpak's rule, and shiro does not claim
 to have made `filesystem=home` safe.
 
-**Not enforced by `catalog validate`**, though a recipe's `[item.permissions]`
-can declare one. The validator would have to call into `src/perms/`, and that
-module survives as an exception only while it stays sealed: reachable from its
-own native commands and from the engine recording a declaration, and from
-nowhere else. The refusal happens at `apply`, which is the recipe's `post`, so
-it fails loudly inside the transaction that declared it and the rollback undoes
-the rest.
+**Enforced by `catalog validate` as well**, since 0.3.1. It was not, for one
+release, on the reasoning that the validator would have to call into
+`src/perms/` and that module survives as an exception only while it stays
+sealed. That reasoning weighed the seal correctly and the cost wrongly.
+
+`apply` runs inside the recipe's `post`, on the machine of whoever installed,
+and under `rollback = "atomic"` a failure there takes the installation with it:
+a mistyped permission is an application that installs and then disappears, and
+every gate before that, an image build validating its whole catalog included,
+reported success. Deny by default made it worse in the same release, because
+profiles stopped being three-word deny lists: the migration that prompted this
+was eighty permission strings across eleven applications, none of them looked
+at by `validate`.
+
+What resolves the tension is the direction of the call. The validator hands the
+declaration to the permission module and prints the sentences it gets back. It
+asks; it does not learn. Nothing about sockets, devices or flatpak enters the
+engine, and the closed lists stay in the one file that owns them, which is the
+part that actually matters: a second copy of the vocabulary inside the engine
+would be the copy nobody updates. `CLAUDE.md` now names three callers instead
+of two, with that test written down for the next one.
 
 ## `perms flatpak apply` emits one invocation, and knows nothing about `:reset`
 

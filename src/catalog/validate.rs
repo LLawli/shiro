@@ -15,6 +15,7 @@ use std::path::Path;
 use crate::catalog::model::{Hook, Hooks, ItemDecl, ListDecl, Rollback};
 use crate::catalog::{Body, Catalog, Kind, Layer, Node};
 use crate::cli::NATIVE;
+use crate::perms;
 
 pub struct Finding {
     pub path: String,
@@ -204,19 +205,25 @@ fn script(hook: &Hook, name: &str, node: &Node, report: &mut impl FnMut(String))
     }
 }
 
+/// The one rule in this file the validator does not know how to check.
+///
+/// `[item.permissions]` is written in the permission module's vocabulary, and
+/// that module is the only part of shiro allowed to know a mechanism. So the
+/// question is asked rather than answered here: the validator hands over the
+/// declaration and prints the sentences it gets back, and learns nothing about
+/// sockets, devices or flatpak in the process.
+///
+/// The alternative was to leave it to `apply`, which runs in the recipe's
+/// `post`, on the machine of whoever installed. That is late by every measure
+/// that matters: an image build validating its whole catalog reports success,
+/// and under `rollback = "atomic"` the failure a user finally sees takes the
+/// installation with it.
 fn permissions(item: &ItemDecl, report: &mut impl FnMut(String)) {
     let Some(permissions) = &item.permissions else {
         return;
     };
 
-    if !matches!(permissions.backend.as_str(), "run" | "flatpak") {
-        report(format!(
-            "`[item.permissions]` names the backend `{}`; it is `run` or `flatpak`",
-            permissions.backend
-        ));
-    }
-
-    if permissions.app.trim().is_empty() {
-        report("`[item.permissions]` declares an empty `app`".to_owned());
+    for finding in perms::findings(permissions) {
+        report(finding);
     }
 }

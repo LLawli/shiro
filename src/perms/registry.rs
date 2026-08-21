@@ -78,13 +78,24 @@ pub fn restore(record: &Record) -> Result<(), Error> {
 /// The declaration, as a profile file. A recipe's `[item.permissions]` block and
 /// a profile are the same shape, so this is a copy with the keys ordered rather
 /// than a translation.
-fn render(decl: &PermissionsDecl) -> String {
+/// The declaration as the profile file it becomes.
+///
+/// Shared with the validator, so that what `catalog validate` reads is the file
+/// the engine would write rather than something assembled a second way. Two
+/// assemblies of the same thing drift, and this one drifting means a recipe
+/// that validates and then records a profile nothing can read.
+pub fn table(decl: &PermissionsDecl) -> toml::Table {
     let mut table = toml::Table::new();
     table.insert("backend".to_owned(), decl.backend.clone().into());
     table.insert("app".to_owned(), decl.app.clone().into());
     for (key, value) in &decl.body {
         table.insert(key.clone(), value.clone());
     }
+    table
+}
+
+fn render(decl: &PermissionsDecl) -> String {
+    let table = table(decl);
 
     format!(
         "# Written by shiro from the `[item.permissions]` of a recipe.\n# Edits here are kept: \

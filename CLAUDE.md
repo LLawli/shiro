@@ -34,9 +34,10 @@ commit.
 purpose. The exception survives only while it is sealed, which means all three
 of these hold:
 
-1. **The module is reachable from exactly two places:** its own native commands
-   (`shiro perms`, `shiro run`), and the engine recording an
-   `[item.permissions]` declaration into the profile registry.
+1. **The module is reachable from exactly three places:** its own native
+   commands (`shiro perms`, `shiro run`), the engine recording an
+   `[item.permissions]` declaration into the profile registry, and
+   `catalog validate` asking whether such a declaration holds together.
 2. **The recipe executor never calls into it.** Not to apply a profile, not to
    check one, not to warn about one. Installing and confining are separate
    operations that happen to ship together.
@@ -47,6 +48,14 @@ of these hold:
 Rule 3 is the one that will be tempting to break, because "the engine could
 just write the `.desktop` too" removes boilerplate from every recipe. It also
 puts desktop-entry conventions inside the engine forever.
+
+The third caller in rule 1 is the newest, and it is the one to keep honest.
+`catalog validate` hands the declaration over and prints the sentences it gets
+back: it asks a question and never learns what a socket is, what flatpak is, or
+that either exists. The line it must not cross is importing the vocabulary,
+because then the closed lists live in two places and the copy inside the engine
+is the one nobody updates. If a fourth caller is ever proposed, the test is the
+same: does it ask, or does it learn?
 
 ## `shiro run` fails closed, loudly
 

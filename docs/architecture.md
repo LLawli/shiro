@@ -308,7 +308,12 @@ Schema rules the validator enforces:
 - a `{ file = ... }` hook may not appear in the built-in layer at all, which is
   embedded in the binary and has no directory on disk. Inline the script;
 - `[item.permissions]` names `run` or `flatpak` as its backend, and a non-empty
-  `app`;
+  `app`; it holds together as the profile file the registry would write from it,
+  declares the block belonging to its own backend, and, for a `flatpak` one, is
+  written in words and values the permission vocabulary has, none of which is
+  one that can never be granted (section 9). This is the one rule the validator
+  does not answer itself: it hands the declaration to the permission module and
+  reports the sentences it gets back, so the closed lists live in one place;
 - `keywords` holds no empty entry and `confirm`, where declared, is not empty;
 - a list declares a non-empty `entries.command`, and nothing is declared as a
   child of a list, whose children come from its generator.
@@ -758,6 +763,15 @@ denied on every `apply`:
 There is deliberately no escape hatch for these, because a flag that turns the
 list off is the flag every recipe would copy. `apply` also denies `~/.var/app`,
 which is every other application's data.
+
+**`catalog validate` refuses the same words `apply` refuses.** A recipe's
+`[item.permissions]` is checked against this vocabulary where the catalog is
+checked, rather than only where it is applied: `apply` runs inside the recipe's
+`post`, on the machine of whoever installed, and under `rollback = "atomic"` a
+failure there takes the installation with it. The validator does not learn the
+vocabulary to do it. It hands the declaration over and prints what comes back,
+which is what keeps the closed lists in one place and the permission module the
+only part of shiro that knows a mechanism.
 
 What this does not do is make `filesystem=home` or `filesystem=host` safe. Both
 reach the override directory by containing it, and both stay declarable,
